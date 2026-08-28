@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Синхронизирует скилл из dotfiles (ведущая копия) в этот репозиторий.
-# Ведущая копия живёт в ~/dotfiles/claude/.claude/skills/forge3d и раздаётся
+# Ведущая копия живёт в ~/dotfiles/claude/.claude/skills/forgeAi3d и раздаётся
 # через stow в ~/.claude/skills. Здесь лежит копия для тех, у кого dotfiles нет.
 set -euo pipefail
 
-SRC="${FORGE3D_SKILL_SRC:-$HOME/dotfiles/claude/.claude/skills/forge3d}"
-DST="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/skill/forge3d"
+SRC="${FORGEAI3D_SKILL_SRC:-$HOME/dotfiles/claude/.claude/skills/forgeAi3d}"
+DST="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/skill/forgeAi3d"
 
 if [[ ! -d "$SRC" ]]; then
   echo "Ведущей копии нет: $SRC" >&2
-  echo "Задай путь через FORGE3D_SKILL_SRC, если dotfiles лежат в другом месте." >&2
+  echo "Задай путь через FORGEAI3D_SKILL_SRC, если dotfiles лежат в другом месте." >&2
   exit 1
 fi
 

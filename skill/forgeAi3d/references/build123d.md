@@ -1,7 +1,7 @@
 # build123d — шпаргалка
 
 Всё ниже проверено на живом коде (build123d 0.11.1, Python 3.14, macOS arm64).
-Работать из `~/dev/forge3d`, запускать через `uv run python models/деталь.py`.
+Работать из `~/dev/forgeAi3d`, запускать через `uv run python models/деталь.py`.
 
 ## Скелет файла модели
 

@@ -275,7 +275,7 @@ wheels = [
 ]
 
 [[package]]
-name = "forge3d"
+name = "forgeai3d"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

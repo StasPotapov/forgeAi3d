@@ -1,4 +1,4 @@
-# forge3d
+# forgeAi3d
 
 Воркспейс для моделирования деталей под 3D-печать **вместе с AI-агентом**.
 
@@ -33,8 +33,8 @@ GUI-редактор с MCP заставляет агента кликать в 
 Нужны [uv](https://docs.astral.sh/uv/) и OpenSCAD.
 
 ```bash
-git clone git@github.com:StasPotapov/forge3d.git ~/dev/forge3d
-cd ~/dev/forge3d
+git clone git@github.com:StasPotapov/forgeAi3d.git ~/dev/forgeAi3d
+cd ~/dev/forgeAi3d
 uv sync
 ```
 
@@ -146,16 +146,16 @@ uv run tools/check.py big.stl --no-thickness    # пропустить долг�
 
 ## Скилл для Claude Code
 
-В `skill/forge3d/` лежит скилл, который учит агента работать по этому циклу: обязательно
+В `skill/forgeAi3d/` лежит скилл, который учит агента работать по этому циклу: обязательно
 смотреть на превью, гонять проверку перед выдачей, брать зазоры из `forge`, а не выдумывать,
 и править константу вместо пересборки модели. Внутри — шпаргалка по API build123d
 (каждый пример исполнен, а не написан по памяти) и правила проектирования под FDM.
 
 ```bash
-ln -s ~/dev/forge3d/skill/forge3d ~/.claude/skills/forge3d
+ln -s ~/dev/forgeAi3d/skill/forgeAi3d ~/.claude/skills/forgeAi3d
 ```
 
-Дальше он подхватится сам по контексту или вызывается как `/forge3d <что нужно>`.
+Дальше он подхватится сам по контексту или вызывается как `/forgeAi3d <что нужно>`.
 
 Скилл универсален: конкретное железо он берёт из `forge/spec.py`, а не из своего текста.
 
