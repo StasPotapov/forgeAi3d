@@ -1,6 +1,6 @@
 # build123d — шпаргалка
 
-Всё ниже проверено на живом коде (build123d 0.11.1, Python 3.13, macOS arm64).
+Всё ниже проверено на живом коде (build123d 0.11.1, Python 3.14, macOS arm64).
 Работать из `~/dev/forge3d`, запускать через `uv run python models/деталь.py`.
 
 ## Скелет файла модели
@@ -24,10 +24,9 @@ with BuildPart() as part:
     Hole(radius=(SCREW + 2 * clearance(MAT, "free")) / 2)
 
 OUT.mkdir(parents=True, exist_ok=True)
-stl = OUT / "деталь.stl"
-if not export_stl(part.part, str(stl)):     # возвращает bool, исключения НЕ бросает
-    raise RuntimeError(f"не удалось записать {stl}")
-export_step(part.part, str(OUT / "деталь.step"))
+for path, writer in ((OUT / "деталь.stl", export_stl), (OUT / "деталь.step", export_step)):
+    if not writer(part.part, str(path)):    # оба возвращают bool, исключений НЕ бросают
+        raise RuntimeError(f"не удалось записать {path}")
 ```
 
 ## Примитивы
@@ -114,13 +113,17 @@ Cylinder(radius=5, height=50, mode=Mode.SUBTRACT)
 
 | Функция | Отдаёт | Годится для |
 |---|---|---|
-| `import_step(path)` | `Solid` | полноценная правка, булевы операции |
+| `import_step(path)` | `Solid` для одного тела, `Compound` для нескольких | полноценная правка, булевы операции |
 | `import_stl(path)` | **`Face`** | только показать; булевы операции НЕ пройдут |
-| `export_step(part, path)` | бросает `RuntimeError` при сбое | обмен, дальнейшие правки |
-| `export_stl(part, path)` | **возвращает `bool`** | печать |
+| `export_step(part, path)` | **`bool`** | обмен, дальнейшие правки |
+| `export_stl(part, path)` | **`bool`** | печать |
 
-`export_stl` при ошибке молча вернёт `False` и ничего не запишет — старый файл останется
-на диске и уйдёт в печать как свежий. Проверять возврат обязательно.
+Тела из импортированного STEP достаются через `.solids()` — так работает и для `Solid`,
+и для `Compound`, не надо гадать что вернулось.
+
+**Оба экспорта возвращают `bool` и не бросают исключений.** При ошибке они молча вернут
+`False` и ничего не запишут — старый файл останется на диске и уйдёт в печать как свежий.
+Проверять возврат обязательно.
 
 ## Правка чужих мешей — trimesh
 
@@ -128,7 +131,9 @@ build123d для STL не годится. Меши правятся через t
 булевы операции работают):
 
 ```python
+import numpy as np
 import trimesh
+
 m = trimesh.load_mesh("out/чужая.stl")
 if isinstance(m, trimesh.Scene):
     m = m.to_mesh()
@@ -152,8 +157,9 @@ m.export("out/правленая.stl")
 
 - `Cone(top_radius=0)` даёт вырожденный треугольник в вершине и негерметичный STL —
   бери `top_radius=0.5` или строй вращением.
-- Два тела, соприкасающихся ровно гранью, остаются двумя телами в STL (`body_count == 2`).
-  Делай перекрытие хотя бы 0.01 мм.
+- Тела, соприкасающиеся ровно гранью, сливаются в одно — проверено, перекрытие для этого
+  не нужно. А вот тела с зазором остаются раздельными и молча уезжают в STL двумя кусками:
+  на это смотри строку «тел в файле» в выводе `check.py`.
 - `from build123d import *` тянет много имён, но `pathlib.Path` не затеняет — проверено.
 - Относительные пути в экспорте считаются от CWD. Всегда строй путь от `__file__`.
 - `part` внутри `with BuildPart() as part` — это билдер; тело достаётся как `part.part`.

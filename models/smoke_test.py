@@ -27,10 +27,9 @@ with BuildPart() as part:
     chamfer(part.faces().sort_by(Axis.Z)[-1].edges(), length=0.8)
 
 OUT.mkdir(parents=True, exist_ok=True)
-stl = OUT / "smoke_test.stl"
-if not export_stl(part.part, str(stl)):
-    raise RuntimeError(f"не удалось записать {stl}")
-export_step(part.part, str(OUT / "smoke_test.step"))
+for path, writer in ((OUT / "smoke_test.stl", export_stl), (OUT / "smoke_test.step", export_step)):
+    if not writer(part.part, str(path)):
+        raise RuntimeError(f"не удалось записать {path}")
 
 print(f"материал   {MAT}")
 print(f"отверстие  {hole_d:.2f} мм под винт M{M3:.0f}")
