@@ -5,6 +5,7 @@ requires-python = ">=3.13"
 dependencies = [
     "build123d>=0.11.1",
     "manifold3d>=3.5.2",
+    "networkx>=3.6.1",
     "numpy>=2.5.2",
     "pillow>=12.3.0",
     "rtree>=1.4.1",
