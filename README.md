@@ -1,36 +1,47 @@
 # forgeAi3d
 
-Воркспейс для моделирования деталей под 3D-печать **вместе с AI-агентом**.
+**English** · [Русский](README.ru.md)
 
-Идея простая: модель — это Python-файл, а не проект в GUI. Значит агент видит её целиком,
-правит точечно и версионирует. Ты говоришь, что нужно, — получаешь STL, превью и отчёт
-о печатопригодности. Печатаешь, говоришь что не так — правится одна константа.
+A workspace for designing 3D-printable parts **together with an AI agent**.
+
+> The tools and the Claude Code skill speak Russian — that is what the output samples
+> below look like. The code, the CLI flags and this file are in English; translating the
+> messages is a small, self-contained change if you need it.
+
+The idea is simple: a part is a Python file, not a project inside a GUI. The agent sees
+it whole, edits one line, and keeps the history. You describe what you need and get an
+STL, a preview and a printability report. You print it, say what is wrong, and one
+constant changes.
 
 ```
-описание задачи → models/деталь.py → out/деталь.stl + .step + превью → печать
-                        ↑                                                 │
-                        └────── «отверстие мало на полмиллиметра» ─────────┘
+what you need → models/part.py → prints/part/part.stl → print
+                      ↑                                 │
+                      └── "the hole is half a mm small" ┘
 ```
 
-![контактный лист калибровочной гребёнки](docs/fit_test.png)
+![contact sheet of the clearance comb](docs/fit_test.png)
 
-Стек: [build123d](https://github.com/gumyr/build123d) (B-Rep поверх OCCT — настоящие фаски,
-скругления и STEP), [trimesh](https://github.com/mikedh/trimesh) (анализ и правка чужих
-мешей), [OpenSCAD](https://openscad.org) в headless-режиме (рендер превью, чтобы агент
-видел результат своими глазами).
+Stack: [build123d](https://github.com/gumyr/build123d) (B-Rep on OCCT — real fillets,
+chamfers and STEP), [augura](https://github.com/pzfreo/augura) (printability from exact
+geometry rather than triangles), [bd_warehouse](https://github.com/gumyr/bd_warehouse)
+(screws, nuts, bearings and threads to standard),
+[trimesh](https://github.com/mikedh/trimesh) (inspecting and repairing other people's
+meshes), [OpenSCAD](https://openscad.org) headless (rendering previews so the agent can
+look at the result with its own eyes).
 
-## Зачем, если есть GUI-редакторы
+## Why not a GUI editor with MCP
 
-GUI-редактор с MCP заставляет агента кликать в чужом интерфейсе: он не может отдать файл
-и не может принять твой STL иначе как массивом координат. Здесь наоборот — файл на входе,
-файл на выходе, а между ними текст, который агент читает и правит.
+A GUI editor behind MCP makes the agent click around someone else's interface: it cannot
+hand you a file, and it cannot take your STL as anything but an array of coordinates.
+Here it is the other way round — a file goes in, a file comes out, and in between there
+is text the agent reads and edits.
 
-Побочная выгода: параметры детали становятся именованными константами. «Сделай стенку
-потолще» — это правка одной строки, а не перерисовывание модели.
+A side benefit: the part's parameters become named constants. "Make the wall thicker" is
+a one-line edit, not a redraw.
 
-## Установка
+## Install
 
-Нужны [uv](https://docs.astral.sh/uv/) и OpenSCAD.
+You need [uv](https://docs.astral.sh/uv/) and OpenSCAD.
 
 ```bash
 git clone git@github.com:StasPotapov/forgeAi3d.git ~/dev/forgeAi3d
@@ -38,150 +49,310 @@ cd ~/dev/forgeAi3d
 uv sync
 ```
 
-OpenSCAD на macOS — **именно snapshot-каск**, стабильный `openscad` это сборка 2021.01
-под Intel, и macOS ругается на неё:
+On macOS install the **snapshot cask** — the stable `openscad` is a 2021.01 Intel build
+that macOS complains about:
 
 ```bash
 brew install --cask openscad@snapshot
 ```
 
-На Linux — `apt install openscad` или пакет дистрибутива. Инструменты ищут бинарь
-`openscad` в `PATH`, на macOS дополнительно смотрят в `/Applications`.
+On Linux use `apt install openscad` or your distribution's package. The tools look for
+an `openscad` binary on `PATH`, and additionally in `/Applications` on macOS.
 
-## Быстрый старт
+The repository can live anywhere: paths are resolved from the package itself and can be
+overridden with `FORGEAI3D_HOME`.
+
+## Quick start
 
 ```bash
-uv run python models/fit_test.py                                    # -> out/fit_test_pla.stl + .step
-uv run tools/preview.py out/fit_test_pla.stl -o out/fit_test_pla.png
-uv run tools/check.py out/fit_test_pla.stl --material PLA
+uv run python models/fit_test.py                                  # -> prints/fit_test_pla/
+uv run tools/measure.py prints/fit_test_pla/fit_test_pla.stl         # dimensions and holes as numbers
+uv run tools/preview.py prints/fit_test_pla/fit_test_pla.stl         # contact sheet
+uv run tools/check.py prints/fit_test_pla/fit_test_pla.stl --material PLA   # print it or not
 ```
 
-`models/fit_test.py` — калибровочная гребёнка: десять отверстий под M3 с зазорами
-от 0.00 до 0.45 мм на сторону. С неё стоит начать (см. «Калибровка» ниже).
+The path to the STL is enough for every tool: they find the STEP for exact analysis
+themselves.
 
-## Настройка под свой принтер
+`models/fit_test.py` is a clearance comb: ten M3 holes with per-side clearances from 0.00
+to 0.45 mm. Start there — see "Calibration" below.
 
-Всё железо и все пластики описаны в одном файле — **`forge/spec.py`**. Из коробки там
-Bambu Lab A1 mini и пластики PLA + PETG.
+## Two real examples
+
+### A wall plug, built from a description
+
+The task arrived as a sentence: a furniture plug for a 5 mm hole and a 3.5×15 screw.
+I supplied three numbers; the agent decided the rest and said so out loud — PETG, because
+it is ductile and survives being wedged apart; a `press` fit, because a plug is hammered
+in; ring barbs instead of the classic split legs, since at a wall of about a millimetre
+printed legs snap along the layers; a 6 mm collar so it hides under the screw's 7 mm head.
+
+![the plug in section](docs/dowel.png)
+
+The model is `models/dowel_5mm.py`, and everything in it turns on constants: `BARB_OVER`
+for how far the barbs stand out, `PILOT_TOP` and `PILOT_BOT` for the inner cone that makes
+the screw bite harder as it goes, `SLOT` to cut a through slit. Printed on an A1 mini.
+
+### A toy katana blade — someone else's model, filled
+
+The second case was not modelling but repairing an incoming STL. The twisted blade of a
+toy katana turned out to be a hollow tube with a wall of about 1.2 mm: the slicer honestly sees
+the cavity and prints it as a void, leaving the part brittle. It had to become solid
+without touching the outer shape.
+
+```
+$ uv run tools/solidify.py katana.stl
+katana.stl: 5161 мм³, найдено внутренних пустот: 1
+  [1]  1496 треугольников, площадь 4013.6 мм², габарит 11.2×9.7×168.8 мм, открытых рёбер 42
+
+$ uv run tools/solidify.py katana.stl --fill 1
+убрано внутренних треугольников: 1496 из 3726
+объём: было 5161 мм³ → стало 11335 мм³
+```
+
+The outer triangles are taken from the original untouched, so the twisted profile and the
+sharp edges are exactly as they were. The volume doubled — what happens inside is now the
+slicer's business.
+
+## Describing your printer
+
+All hardware and all filaments live in one file — **`forge/spec.py`**. Out of the box it
+holds a Bambu Lab A1 mini with PLA and PETG.
 
 ```python
 A1_MINI = Printer(
     name="Bambu Lab A1 mini",
     bed=(180.0, 180.0, 180.0),
     nozzle=0.4,
-    extrusion_width=0.42,   # ширина линии периметра
+    extrusion_width=0.42,   # perimeter line width
     layer_height=0.2,
-    enclosed=False,         # нет закрытой камеры -> ABS/ASA не поедут
-    hardened_nozzle=False,  # нет закалённого -> абразивные не поедут
+    enclosed=False,         # no chamber -> ABS/ASA will not run
+    hardened_nozzle=False,  # not hardened -> no abrasives
     ams=False,
-    bed_slinger=True,       # стол ездит по Y -> высокие детали качает
+    bed_slinger=True,       # bed moves in Y -> tall parts wobble
 )
 
-AVAILABLE = ("PLA", "PETG")   # что реально лежит на полке
+AVAILABLE = ("PLA", "PETG")   # what is actually on the shelf
 ```
 
-Опиши свой принтер и держи `AVAILABLE` в актуальном состоянии — проверки начнут
-ругаться на несовместимые материалы сами.
+Describe your printer and keep `AVAILABLE` honest — the checks will then reject
+incompatible materials on their own.
 
-## Как этим пользуются модели
+## How models use it
 
-Вместо магических чисел — вызовы из `forge`:
+Instead of magic numbers, calls into `forge`:
 
 ```python
-from forge import clearance, wall, compensate_shrink
+from forge import clearance, wall, compensate_shrink, export_all
 
 MAT = "PETG"
-shaft_hole = 8 + 2 * clearance(MAT, "slip")   # 8.6 мм; на PLA было бы 8.4
-case_wall  = wall(3)                          # 1.26 мм = 3 периметра, а не «1.5 мм»
-length     = compensate_shrink(150, MAT)      # 150.9 мм с поправкой на усадку
+shaft_hole = 8 + 2 * clearance(MAT, "slip")   # 8.6 mm; PLA would give 8.4
+case_wall  = wall(3)                          # 1.26 mm = 3 perimeters, not "about 1.5"
+length     = compensate_shrink(150, MAT)      # 150.9 mm allowing for shrinkage
+
+export_all(part.part, "part", material=MAT)   # stl + step + 3mf, writes verified
 ```
 
-Типы посадки: `press` (запрессовка), `snug` (с усилием руки), `slip` (свободно ходит),
-`free` (заведомо с люфтом). Зазор задаётся **на сторону**, отверстие получает удвоенный.
+Fit types: `press`, `snug` (hand pressure), `slip` (moves freely), `free` (deliberately
+loose). Clearance is **per side**; a hole gets twice that.
 
-Помимо PLA и PETG в справочнике заведены `PLA-CF`, `ASA` и `TPU` — чтобы `supported()`
-называл причину, когда материал не подходит принтеру (ASA без закрытой камеры, PLA-CF
-без закалённого сопла), а не выдумывал зазор молча.
+Besides PLA and PETG the reference carries `PLA-CF`, `ASA` and `TPU` — so that
+`supported()` can name the reason a material will not run on this printer (ASA without
+a chamber, PLA-CF without a hardened nozzle) instead of silently inventing a clearance.
+
+Dimensions of other people's hardware, the ones you cannot measure yourself, are looked
+up in a datasheet and cached together with the source — a number without a link is not
+accepted:
+
+```python
+from forge import get_spec, save_spec
+save_spec("raspberry pi 5", {"length": 85.0, "width": 56.0},
+          source="https://datasheets.raspberrypi.com/rpi5/raspberry-pi-5-mechanical-drawing.pdf")
+```
+
+## What comes out
+
+Every part gets its own folder. Only the STL — the file you take to the slicer — sits in
+plain view; everything else moves into `extras/`, so the one file you need is never
+buried among the working ones:
+
+```
+prints/stand/
+    stand.stl                     ← this is what gets printed
+    extras/stand.step             ← CAD edits and exact analysis
+    extras/stand.3mf              ← Bambu Studio: millimetres, name, material
+    extras/stand.png              ← preview
+    extras/stand-overhangs.png    ← overhangs in red
+    extras/stand-section-y.png    ← section
+```
+
+## tools/measure.py
+
+Answers "is this what was asked for" with numbers rather than a picture.
+
+```bash
+uv run tools/measure.py prints/part/part.stl
+uv run tools/measure.py prints/part/part.stl --json
+```
+
+Prints the bounding box, volume, solid count and an inventory of round features: holes
+with diameter, depth and centre coordinates, posts, external rounds and internal fillets.
+Identical ones collapse into `4 × Ø3.40`. A hole is called *through* based on geometry
+rather than on the part's bounding box — a chamfer or embossed text shifts the box and
+would fool that test.
 
 ## tools/preview.py
 
-Рендерит STL в PNG через headless OpenSCAD и собирает виды в один контактный лист.
-Нужен, чтобы агент посмотрел на результат до того, как отдать файл.
+Renders an STL to PNG with headless OpenSCAD and tiles the views into one contact sheet,
+so the agent can look at the result before handing over the file.
 
 ```bash
-uv run tools/preview.py out/part.stl                      # iso, top, front, right
-uv run tools/preview.py out/part.stl --views iso,iso2     # только два ракурса
-uv run tools/preview.py out/part.stl -o /tmp/p.png --size 800
+uv run tools/preview.py prints/part/part.stl                        # iso, top, front, right
+uv run tools/preview.py prints/part/part.stl --overhangs --material PETG
+uv run tools/preview.py prints/part/part.stl --section y            # or y:12.5
+uv run tools/preview.py prints/part/part.stl -o /tmp/p.png --size 800
 ```
 
-Виды: `iso`, `iso2`, `top`, `front`, `right`, `back`.
+Without `-o` the image lands in that part's `extras/`, its name tagged with the mode.
+
+Views: `iso`, `iso2`, `top`, `front`, `right`, `back`, `iso_low`, `bottom`.
+
+`--overhangs` paints everything that needs support red, and switches to the lower views
+by itself — overhangs are invisible from above:
+
+![overhang highlighting](docs/overhangs.png)
+
+`--section` cuts the part open. There is no other way to check the wall thickness of an
+enclosure without printing it.
+
+![sectioned enclosure](docs/section.png)
 
 ## tools/check.py
 
-Проверяет STL перед печатью.
+Checks a part before printing.
 
 ```bash
-uv run tools/check.py out/part.stl --material PETG
-uv run tools/check.py out/part.stl --nozzle 0.6 --bed 256x256x256
-uv run tools/check.py big.stl --no-thickness    # пропустить долгую оценку толщины
+uv run tools/check.py prints/part/part.stl --material PETG
+uv run tools/check.py prints/part/part.stl --nozzle 0.6 --bed 256x256x256
+uv run tools/check.py prints/part/part.stl --no-orientation    # skip the orientation search
 ```
 
-**Код возврата 1** — печатать не стоит: негерметичный меш, непоследовательные нормали,
-вырожденные треугольники, не влезает на стол, слишком тонкие стенки, материал
-несовместим с принтером.
+Geometry is analysed by [augura](https://github.com/pzfreo/augura), from the exact faces
+of the solid rather than from triangles: overhangs, bridges, wall thickness, tip-over,
+brim, bed fit, and the smallest vertical step (which is also your maximum layer height).
+It also ranks poses and suggests the one with the least unsupported overhang.
 
-**Предупреждения на код возврата не влияют** — они зависят от ориентации детали,
-а её выбирают уже в слайсере. Сюда попадают свесы, риск опрокидывания высокой узкой
-детали и материал, которого нет в наличии.
+For thickness augura reports the minimum, but a part is failed on the **share of the
+surface** below two perimeters: at a chamfer, a draft or the edge of embossed text the
+thickness tends to zero by construction, so judging by the minimum alone would fail every
+part with a label on it. The minimum stays in the report for reference.
 
-### Про оценку толщины
+Given an STL, a STEP of the same name next to it is picked up and used instead. Without
+a STEP the analysis is approximate: **wall thickness and small features are not computed
+from a mesh**, and the report says so.
 
-Считается лучами внутрь тела от 1500 случайных точек поверхности. Деталь помечается
-проблемной, когда тоньше порога оказывается **заметная доля поверхности** (более 5%),
-а не когда один сэмпл ушёл в ноль: у любой фаски, уклона или конуса перпендикулярная
-толщина у самой кромки стремится к нулю по построению. Минимум печатается справочно.
+Mesh quality itself — watertightness, winding, degenerate triangles, body count — is
+checked from the STL, since a STEP cannot have those problems by construction.
 
-Оценка приблизительная в обе стороны: очень мелкий тонкий участок она может не поймать.
-На негерметичном меше не выполняется вовсе — лучи внутрь тела там не считаются.
+**Exit code 1** means do not print: a leaky mesh, a wall that is too thin, a part that
+will topple, one that fits the bed in no orientation, or a material the printer cannot
+run. A part that fits after a 90° turn in the bed plane is a warning rather than a
+failure: augura measures the bounding box along the axes as given, while on the bed you
+place the part whichever way is convenient.
 
-## Скилл для Claude Code
+**Warnings do not affect the exit code** — they depend on how the part is placed, and
+that is decided in the slicer: overhangs, brim, the suggestion to rotate.
 
-В `skill/forgeAi3d/` лежит скилл, который учит агента работать по этому циклу: обязательно
-смотреть на превью, гонять проверку перед выдачей, брать зазоры из `forge`, а не выдумывать,
-и править константу вместо пересборки модели. Внутри — шпаргалка по API build123d
-(каждый пример исполнен, а не написан по памяти) и правила проектирования под FDM.
+## tools/solidify.py
+
+Fills the internal cavity of someone else's mesh. A hollow model (a tube, a vase-mode
+print, a scanned shell) prints empty: the slicer honestly sees the void and puts no
+infill inside.
+
+```bash
+uv run tools/solidify.py incoming.stl                          # show what is inside
+uv run tools/solidify.py incoming.stl --fill 1     # -> prints/incoming_solid/
+```
+
+First the tool lists the voids it found — triangle count, area, bounding box, and how
+many open edges the void has (zero means a sealed cavity):
+
+```
+katana_orig.stl: 5161 mm3, internal voids found: 1
+  [1]  1496 triangles, area 4013.6 mm2, bounds 11.2x9.7x168.8 mm, open edges 42
+```
+
+**You choose what to fill.** Telling a cavity from a through hole automatically is not
+possible: to a ray the wall of a hole looks just as internal, and a tube's cavity is
+itself open at the end. So without `--fill` nothing is written at all — the tool will not
+silently close your screw holes.
+
+The chosen shell is removed and the resulting rim is capped with a fan from its centroid.
+The outer geometry is never touched — the original outer triangles are kept, so the
+profile and sharp edges survive 1:1.
+
+## The Claude Code skill
+
+`skill/forgeAi3d/` holds a skill that teaches the agent this loop: verify dimensions as
+numbers, always look at the preview, run the check before handing anything over, take
+clearances from `forge` instead of inventing them, look up hardware dimensions in a
+datasheet instead of making them up, and edit a constant rather than rebuild the model.
+Inside are a build123d and bd_warehouse cheat sheet (every example executed, not written
+from memory) and design rules for FDM.
 
 ```bash
 ln -s ~/dev/forgeAi3d/skill/forgeAi3d ~/.claude/skills/forgeAi3d
 ```
 
-Дальше он подхватится сам по контексту или вызывается как `/forgeAi3d <что нужно>`.
+It then triggers from context, or is invoked as `/forgeAi3d <what you need>`.
 
-Скилл универсален: конкретное железо он берёт из `forge/spec.py`, а не из своего текста.
+The skill is generic: the specific hardware comes from `forge/spec.py`, not from its own
+text.
 
-## Калибровка
+## Calibration
 
-Зазоры и усадка в `forge/spec.py` — типовые практические значения, а не паспортные
-константы. Они зависят от катушки, влажности и профиля печати.
+The clearances and shrinkage in `forge/spec.py` are typical working values, not spec
+sheet constants. They depend on the spool, the humidity and the print profile.
 
-Чтобы получить свои: поменять `MAT` в `models/fit_test.py`, напечатать по гребёнке
-на каждый пластик (материал подписан на детали и попадает в имя файла), вставить винт M3
-в каждое отверстие и найти два номера — где винт входит с усилием руки (`snug`) и где
-ходит свободно без люфта (`slip`). Отверстие N имеет зазор `0.05 * N` на сторону,
-диапазон 0.00–0.45 покрывает все четыре посадки.
-Полученные числа вписать в `clearances` соответствующего материала.
+To get your own: change `MAT` in `models/fit_test.py`, print the comb once per filament
+(the material is embossed on the part and ends up in the file name), push an M3 screw
+into every hole and find two numbers — where the screw goes in with hand pressure
+(`snug`) and where it moves freely without play (`slip`). Hole N has a per-side clearance
+of `0.05 * N`; the 0.00–0.45 range covers all four fits. Put those numbers into
+`clearances` for that material.
 
-## Структура
+## How this differs from CAD MCP servers
+
+Nearby live [build123d-mcp](https://github.com/pzfreo/build123d-mcp),
+[agentcad](https://github.com/jdilla1277/agentcad) and
+[cad-agent](https://github.com/Svetlana-DAO-LLC/cad-agent) — they give the agent a CAD
+session and a toolbox inside it.
+
+forgeAi3d is built differently:
+
+- **a part is a file in a repository**, not session state. It shows up in git, and you
+  can come back half a year later and change one constant;
+- **the printer profile is executable code**, not a paragraph in a prompt. `wall(3)`
+  knows the line width, `clearance()` knows the plastic, and `supported()` knows that ASA
+  will not run here;
+- **the loop does not end at export**. The most common job is "printed it, the hole is
+  too small", and the skill covers that case explicitly.
+
+Nothing stops you from using both: an MCP server for sculpting geometry in conversation,
+forgeAi3d when a part has to be stored, reproduced and refined after each print.
+
+## Layout
 
 ```
-models/    исходники деталей (.py, build123d)
-forge/     параметры принтера и справочник филаментов
-tools/     preview.py — рендер, check.py — проверка печатопригодности
-skill/     скилл для Claude Code
-scripts/   sync-skill.sh — синхронизация скилла с ведущей копией
-out/       экспорт: .stl, .step, превью .png (в .gitignore)
+models/    part sources (.py, build123d)
+forge/     printer profile, filament reference, export, cache of looked-up dimensions
+tools/     preview.py — render, check.py — printability, measure.py — dimensions, solidify.py — fill cavities
+skill/     the Claude Code skill
+scripts/   sync-skill.sh — sync the skill with its leading copy
+docs/      images for this file
+prints/    one folder per part: the STL in plain view, the rest in extras/ (gitignored)
 ```
 
-## Лицензия
+## License
 
-MIT — см. [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).

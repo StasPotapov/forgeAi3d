@@ -8,11 +8,9 @@
 Отверстие N имеет зазор STEP*N на сторону, то есть диаметр SCREW + 2*STEP*N.
 Диапазон покрывает все четыре посадки обоих пластиков: от press (0.00) до free (0.45).
 """
-from pathlib import Path
-
 from build123d import *
 
-OUT = Path(__file__).resolve().parent.parent / "out"
+from forge import export_all
 
 MAT = "PLA"          # печатается отдельно под каждый пластик, имя файла это учитывает
 SCREW = 3.0          # номинальный диаметр винта M3
@@ -66,15 +64,12 @@ with BuildPart() as part:
     # фаска по нижнему контуру против elephant foot
     chamfer(part.faces().sort_by(Axis.Z)[0].edges(), length=0.5)
 
-OUT.mkdir(parents=True, exist_ok=True)
 stem = f"fit_test_{MAT.lower().replace('-', '_')}"
-for path, writer in ((OUT / f"{stem}.stl", export_stl), (OUT / f"{stem}.step", export_step)):
-    if not writer(part.part, str(path)):
-        raise RuntimeError(f"не удалось записать {path}")
+paths = export_all(part.part, stem, material=MAT)
 
 bb = part.part.bounding_box()
 print(f"материал   {MAT}")
 print(f"пластина   {bb.size.X:.1f} x {bb.size.Y:.1f} x {bb.size.Z:.1f} мм")
-print(f"файл       out/{stem}.stl")
+print(f"файлы      {', '.join(str(v.name) for v in paths.values())}")
 for i in range(COUNT):
     print(f"  {i}: зазор {STEP * i:.2f} на сторону -> отверстие {SCREW + 2 * STEP * i:.2f} мм")

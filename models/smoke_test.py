@@ -1,13 +1,10 @@
 """Проверочная деталь: пластина 40x24x6 с двумя отверстиями под M3,
 скруглёнными углами и фаской по верхнему контуру."""
-from pathlib import Path
-
 from build123d import *
 
-from forge import clearance
+from forge import clearance, export_all
 
 MAT = "PETG"
-OUT = Path(__file__).resolve().parent.parent / "out"
 
 L, W, H = 40.0, 24.0, 6.0
 M3 = 3.0
@@ -26,13 +23,11 @@ with BuildPart() as part:
 
     chamfer(part.faces().sort_by(Axis.Z)[-1].edges(), length=0.8)
 
-OUT.mkdir(parents=True, exist_ok=True)
-for path, writer in ((OUT / "smoke_test.stl", export_stl), (OUT / "smoke_test.step", export_step)):
-    if not writer(part.part, str(path)):
-        raise RuntimeError(f"не удалось записать {path}")
+paths = export_all(part.part, "smoke_test", material=MAT)
 
 print(f"материал   {MAT}")
 print(f"отверстие  {hole_d:.2f} мм под винт M{M3:.0f}")
 print(f"объём      {part.part.volume:.1f} мм³")
 bb = part.part.bounding_box()
 print(f"габариты   {bb.size.X:.1f} x {bb.size.Y:.1f} x {bb.size.Z:.1f} мм")
+print(f"файлы      {', '.join(str(v.name) for v in paths.values())}")

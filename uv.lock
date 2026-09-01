@@ -21,6 +21,32 @@ wheels = [
 ]
 
 [[package]]
+name = "augura"
+version = "0.1.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "build123d" },
+    { name = "trimesh" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b6/7f/694878f951ee51ab657b9ac24a4524ac37f5b0874ea69afeff270cca2870/augura-0.1.7.tar.gz", hash = "sha256:94cd494dc1143e5e0ac1e42ace62ccddd325b6e3fd270141a18b7a60d2b5ea66", size = 335819, upload-time = "2026-07-03T10:53:13.044Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/39/00/484cb6fdaab99be779676d749c049338ba7b003defb189ef91523b5537ac/augura-0.1.7-py3-none-any.whl", hash = "sha256:8748a813c106965e38e6e0ad4d79e1d0b7c0d17727aa8613d80d1e2fce7e560e", size = 40166, upload-time = "2026-07-03T10:53:11.692Z" },
+]
+
+[[package]]
+name = "bd-warehouse"
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "build123d" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8d/28/e8fa9fcd867db480ae7e109476c73310a5ca1ff7f246466709ad84f4f830/bd_warehouse-0.3.0.tar.gz", hash = "sha256:38f339909772770f7d211d7d25dd3572bdfb83d09eb65dee6380dea3a09ea49e", size = 8046603, upload-time = "2026-07-12T18:31:28.714Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d1/10/431fed58b4bccf7aed3f124442f2eeeecc3f83468eaa341aab9b31ff84e3/bd_warehouse-0.3.0-py3-none-any.whl", hash = "sha256:291c40f3ed04ac6dac2fbd7592eb0da3193a6aa93e3d3b741d915ca190dc99fc", size = 140511, upload-time = "2026-07-12T18:31:27.177Z" },
+]
+
+[[package]]
 name = "build123d"
 version = "0.11.1"
 source = { registry = "https://pypi.org/simple" }
@@ -279,6 +305,8 @@ name = "forgeai3d"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "augura" },
+    { name = "bd-warehouse" },
     { name = "build123d" },
     { name = "manifold3d" },
     { name = "networkx" },
@@ -290,6 +318,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "augura", specifier = ">=0.1.7" },
+    { name = "bd-warehouse", specifier = ">=0.3.0" },
     { name = "build123d", specifier = ">=0.11.1" },
     { name = "manifold3d", specifier = ">=3.5.2" },
     { name = "networkx", specifier = ">=3.6.1" },

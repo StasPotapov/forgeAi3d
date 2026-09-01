@@ -1,4 +1,6 @@
 .venv/
 __pycache__/
-out/
+prints/
 .DS_Store
+result.json
+forge/specs_cache.json

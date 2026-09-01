@@ -1,18 +1,17 @@
 # build123d — шпаргалка
 
-Всё ниже проверено на живом коде (build123d 0.11.1, Python 3.14, macOS arm64).
-Работать из `~/dev/forgeAi3d`, запускать через `uv run python models/деталь.py`.
+Всё ниже проверено на живом коде (build123d 0.11.1, bd_warehouse 0.3.0, Python 3.14,
+macOS arm64). Работать из корня репозитория (`$FORGEAI3D_HOME`, по умолчанию
+`~/dev/forgeAi3d`), запускать через `uv run python models/деталь.py`.
 
 ## Скелет файла модели
 
 ```python
 """Что за деталь и для чего."""
-from pathlib import Path
 from build123d import *
-from forge import clearance, wall, compensate_shrink
+from forge import clearance, export_all, wall, compensate_shrink
 
 MAT = "PETG"
-OUT = Path(__file__).resolve().parent.parent / "out"
 
 # --- параметры, которые крутятся по итогам печати ---
 L, W, H = 40.0, 24.0, 6.0
@@ -23,10 +22,8 @@ with BuildPart() as part:
     Box(L, W, H)
     Hole(radius=(SCREW + 2 * clearance(MAT, "free")) / 2)
 
-OUT.mkdir(parents=True, exist_ok=True)
-for path, writer in ((OUT / "деталь.stl", export_stl), (OUT / "деталь.step", export_step)):
-    if not writer(part.part, str(path)):    # оба возвращают bool, исключений НЕ бросают
-        raise RuntimeError(f"не удалось записать {path}")
+# prints/деталь/деталь.stl, остальное в prints/деталь/extras/; запись проверена
+paths = export_all(part.part, "деталь", material=MAT)
 ```
 
 ## Примитивы
@@ -115,15 +112,85 @@ Cylinder(radius=5, height=50, mode=Mode.SUBTRACT)
 |---|---|---|
 | `import_step(path)` | `Solid` для одного тела, `Compound` для нескольких | полноценная правка, булевы операции |
 | `import_stl(path)` | **`Face`** | только показать; булевы операции НЕ пройдут |
-| `export_step(part, path)` | **`bool`** | обмен, дальнейшие правки |
+| `export_step(part, path)` | **`bool`** | обмен, дальнейшие правки, точный анализ в check.py |
 | `export_stl(part, path)` | **`bool`** | печать |
+| `export_all(part, stem, material=)` | `dict` путей | обычный способ: сразу stl + step + 3mf |
 
 Тела из импортированного STEP достаются через `.solids()` — так работает и для `Solid`,
 и для `Compound`, не надо гадать что вернулось.
 
 **Оба экспорта возвращают `bool` и не бросают исключений.** При ошибке они молча вернут
 `False` и ничего не запишут — старый файл останется на диске и уйдёт в печать как свежий.
-Проверять возврат обязательно.
+Проверять возврат обязательно; `export_all` из `forge` это уже делает.
+
+3MF пишется классом `Mesher` из build123d — он единственный несёт единицы измерения
+и метаданные, поэтому Bambu Studio открывает такую деталь сразу в миллиметрах:
+
+```python
+from build123d import Mesher, Unit
+mesher = Mesher(unit=Unit.MM)
+mesher.add_shape(part.part, part_number="деталь")
+mesher.add_meta_data("forgeAi3d", "material", "PETG", "str", True)
+mesher.write("prints/деталь.3mf")
+```
+
+## Готовый крепёж — bd_warehouse
+
+Размеры винтов, гаек, подшипников и резьб берутся из стандарта, а не из головы.
+Зазор к ним добавляется свой: у библиотеки посадки машиностроительные, под FDM они тесны.
+
+```python
+from bd_warehouse.fastener import HexNut, SocketHeadCapScrew
+from bd_warehouse.bearing import SingleRowDeepGrooveBallBearing as Bearing
+from bd_warehouse.thread import IsoThread
+
+SocketHeadCapScrew.sizes("iso4762")      # ['M1.6-0.35', 'M2-0.4', 'M2.5-0.45', 'M3-0.5', ...]
+
+screw = SocketHeadCapScrew(size="M3-0.5", length=12, fastener_type="iso4762")
+screw.head_diameter                       # 5.68 — под потай или карман головки
+screw.head_height                         # 3.0
+
+nut = HexNut(size="M3-0.5", fastener_type="iso4032")
+nut.nut_diameter                          # 6.35 — диаметр ПО УГЛАМ (e), не под ключ
+nut.bounding_box().size.Y                 # 5.50 — вот это под ключ (s)
+nut.nut_thickness                         # 2.4
+
+bearing = Bearing(size="M8-22-7", bearing_type="SKT")   # 608
+bearing.outer_diameter, bearing.bore_diameter           # 22, 8
+```
+
+Карман под гайку — шестигранник по размеру гайки плюс посадка из `forge`. Тут легко
+ошибиться дважды: `nut_diameter` это диаметр **по углам**, и `RegularPolygon` по
+умолчанию тоже считает `radius` апофемой, а не радиусом по углам. Ошибиться в обоих
+местах сразу — карман на миллиметр шире нужного, и гайка в нём проворачивается.
+
+```python
+pocket = nut.nut_diameter + 2 * clearance(MAT, "snug")     # 6.65 по углам, для PETG
+with BuildPart() as p:
+    Box(24, 24, 10)
+    with BuildSketch(Plane.XY.offset(5)):
+        RegularPolygon(radius=pocket / 2, side_count=6, major_radius=True)   # ПО УГЛАМ
+    extrude(amount=-(nut.nut_thickness + 0.2), mode=Mode.SUBTRACT)   # +0.2 на посадку по высоте
+    Hole(radius=(3 + 2 * clearance(MAT, "free")) / 2)
+```
+
+Проверено замером выемки: 6.65 × 5.76 мм против гайки 6.35 × 5.50 — по 0.15 мм на
+сторону, как и просили у `clearance`. С `major_radius=False` получилось бы 7.33 мм.
+
+Гнездо под подшипник — запрессовка: `bearing.outer_diameter + 2 * clearance(MAT, "press")`.
+
+Резьба — это только винтовая нарезка, её надо посадить на стержень:
+
+```python
+thread = IsoThread(major_diameter=8, pitch=1.25, length=10,
+                   external=True, end_finishes=("fade", "fade"))
+with BuildPart() as bolt:
+    Cylinder(radius=thread.min_radius, height=10, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    add(thread)
+```
+
+`thread.is_valid` — свойство, а не метод. Печатная резьба разбалтывается: под нагрузку
+бери термовставку или гайку в кармане, см. `design-rules.md`.
 
 ## Правка чужих мешей — trimesh
 
@@ -134,7 +201,7 @@ build123d для STL не годится. Меши правятся через t
 import numpy as np
 import trimesh
 
-m = trimesh.load_mesh("out/чужая.stl")
+m = trimesh.load_mesh("prints/чужая.stl")
 if isinstance(m, trimesh.Scene):
     m = m.to_mesh()
 
@@ -148,7 +215,7 @@ m = trimesh.boolean.union([m, plate])                # приварить
 
 trimesh.repair.fill_holes(m)                         # починить дыры
 trimesh.repair.fix_normals(m)
-m.export("out/правленая.stl")
+m.export("prints/правленая.stl")
 ```
 
 Разрез плоскостью — `m.slice_plane(origin, normal)`. Отдельные тела — `m.split()`.
