@@ -214,18 +214,22 @@ uv run tools/preview.py prints/part/part.stl -o /tmp/p.png --size 800
 ```
 
 Without `-o` the image lands in that part's `extras/`, its name tagged with the mode.
+`--size` is the render resolution: the frame is then cropped to the part, so a tile
+comes out smaller than requested.
 
-Views: `iso`, `iso2`, `top`, `front`, `right`, `back`, `iso_low`, `bottom`.
+Views: `iso`, `iso2`, `iso3`, `iso4` (isometric from four sides), `top`, `front`,
+`right`, `back`, `iso_low`, `bottom`.
 
 `--overhangs` paints everything that needs support red, and switches to the lower views
 by itself — overhangs are invisible from above:
 
 ![overhang highlighting](docs/overhangs.png)
 
-`--section` cuts the part open. There is no other way to check the wall thickness of an
-enclosure without printing it.
+`--section` cuts the part open. There is no other way to check a wall thickness without
+printing the part. The cut plane is painted orange and the views are taken from the side
+of the removed half — otherwise the frame just shows the intact part:
 
-![sectioned enclosure](docs/section.png)
+![the dowel cut across](docs/section.png)
 
 ## tools/check.py
 
