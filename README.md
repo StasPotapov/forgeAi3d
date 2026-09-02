@@ -435,7 +435,6 @@ models/    part sources (.py, build123d)
 forge/     printer profile, filament reference, export, cache of looked-up dimensions
 tools/     preview.py — render, check.py — printability, measure.py — dimensions, solidify.py — fill cavities
 skill/     the agent skill: en/ and ru/, same contents
-scripts/   sync-skill.sh — sync the skill with its leading copy
 docs/      images for this file
 prints/    one folder per part: the STL in plain view, the rest in extras/ (gitignored)
 ```
