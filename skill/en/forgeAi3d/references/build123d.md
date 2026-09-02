@@ -229,8 +229,7 @@ Cutting with a plane — `m.slice_plane(origin, normal)`. Separate bodies — `m
   STL — use `top_radius=0.5` or build it as a revolve.
 - Solids that touch exactly face to face merge into one — verified, no overlap is needed
   for that. Solids with a gap between them, on the other hand, stay separate and quietly
-  end up in the STL as two pieces: watch the "тел в файле" (bodies in file) line in the
-  output of `check.py`.
+  end up in the STL as two pieces: watch the "bodies" line in the output of `check.py`.
 - `from build123d import *` pulls in a lot of names, but it does not shadow `pathlib.Path`
   — verified.
 - Relative paths in the exports are resolved from the CWD. Always build the path from

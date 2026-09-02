@@ -1,9 +1,9 @@
-"""Параметры принтера и справочник филаментов.
+"""Printer profile and filament reference.
 
-Числа здесь — типовые практические значения, а не паспортные константы.
-Усадка и зазоры зависят от конкретной катушки, влажности и профиля печати,
-поэтому перед ответственной деталью их стоит откалибровать тестовой печатью
-(печатается набор отверстий с шагом 0.05 мм и подбирается посадка).
+The numbers here are typical practical values, not datasheet constants. Shrinkage
+and clearances depend on the particular spool, the humidity and the print profile,
+so before a part that matters they are worth calibrating with a test print
+(a set of holes in 0.05 mm steps is printed and the fit is picked off it).
 """
 
 from dataclasses import dataclass
@@ -14,14 +14,14 @@ MM = float
 @dataclass(frozen=True)
 class Printer:
     name: str
-    bed: tuple[MM, MM, MM]      # рабочая область Ш x Г x В
+    bed: tuple[MM, MM, MM]      # build volume W x D x H
     nozzle: MM
-    extrusion_width: MM         # ширина линии периметра при этом сопле
-    layer_height: MM            # типовая высота слоя
-    enclosed: bool              # есть ли закрытая камера
-    hardened_nozzle: bool       # можно ли абразивные филаменты
-    ams: bool                   # есть ли AMS lite
-    bed_slinger: bool           # стол ездит по Y => высокие детали качает
+    extrusion_width: MM         # perimeter line width for this nozzle
+    layer_height: MM            # typical layer height
+    enclosed: bool              # is there an enclosure
+    hardened_nozzle: bool       # can it run abrasive filaments
+    ams: bool                   # is there an AMS lite
+    bed_slinger: bool           # the bed travels in Y => tall parts get shaken
 
     @property
     def max_height(self) -> MM:
@@ -31,16 +31,16 @@ class Printer:
 @dataclass(frozen=True)
 class Material:
     name: str
-    shrink: float               # линейная усадка, доля (0.006 = 0.6%)
-    clearances: dict[str, MM]   # зазор НА СТОРОНУ для типа посадки
-    support_angle: float        # грань наклонена к горизонтали меньше => нужна поддержка
-    max_bridge: MM              # длина моста, который тянет без провисания
-    hdt: float                  # температура размягчения, °C
-    ductile: bool               # вязкий (терпит защёлки) или хрупкий
-    abrasive: bool              # нужно закалённое сопло
-    needs_enclosure: bool       # нужна закрытая камера
-    ams_safe: bool              # можно ли подавать через AMS lite
-    heat_inserts: str           # как держит латунные термовставки: good / ok / poor
+    shrink: float               # linear shrinkage, as a fraction (0.006 = 0.6%)
+    clearances: dict[str, MM]   # clearance PER SIDE for each type of fit
+    support_angle: float        # a face tilted less than this to horizontal needs support
+    max_bridge: MM              # bridge length spanned without sagging
+    hdt: float                  # softening temperature, °C
+    ductile: bool               # ductile (takes snap fits) or brittle
+    abrasive: bool              # needs a hardened nozzle
+    needs_enclosure: bool       # needs an enclosure
+    ams_safe: bool              # can it be fed through an AMS lite
+    heat_inserts: str           # how well it holds brass heat-set inserts: good / ok / poor
     note: str
 
 
@@ -70,8 +70,8 @@ MATERIALS: dict[str, Material] = {
         needs_enclosure=False,
         ams_safe=True,
         heat_inserts="ok",
-        note="Жёсткий и хрупкий. Защёлки ломаются, в углах обязательны галтели. "
-             "В закрытой машине летом плывёт.",
+        note="Stiff and brittle. Snap fits break; fillets in corners are mandatory. "
+             "Softens in a car in summer.",
     ),
     "PETG": Material(
         name="PETG",
@@ -85,11 +85,11 @@ MATERIALS: dict[str, Material] = {
         needs_enclosure=False,
         ams_safe=True,
         heat_inserts="good",
-        note="Вязкий, держит удар и термовставки. Хуже мостит, поддержки прикипают "
-             "намертво — деталь лучше проектировать так, чтобы обойтись без них.",
+        note="Ductile, takes impact and heat-set inserts. Bridges worse and supports fuse "
+             "to it for good, so a part is better designed to do without them.",
     ),
-    # Ниже — то, чего сейчас нет в наличии. Оставлено, чтобы supported() мог
-    # объяснить, почему деталь под этот материал на A1 mini не поедет.
+    # Below is what is not on the shelf right now. Kept so that supported() can
+    # explain why a part in this material will not run on an A1 mini.
     "PLA-CF": Material(
         name="PLA-CF",
         shrink=0.002,
@@ -102,8 +102,8 @@ MATERIALS: dict[str, Material] = {
         needs_enclosure=False,
         ams_safe=True,
         heat_inserts="ok",
-        note="Жёстче и стабильнее по размерам обычного PLA, но заметно хрупче. "
-             "Требует закалённого сопла.",
+        note="Stiffer and more dimensionally stable than plain PLA, but noticeably more "
+             "brittle. Requires a hardened nozzle.",
     ),
     "ASA": Material(
         name="ASA",
@@ -117,7 +117,8 @@ MATERIALS: dict[str, Material] = {
         needs_enclosure=True,
         ams_safe=True,
         heat_inserts="good",
-        note="Уличный и термостойкий, но на открытом принтере коробит и расслаивается.",
+        note="Outdoor-grade and heat resistant, but it warps and delaminates on an open "
+             "printer.",
     ),
     "TPU": Material(
         name="TPU",
@@ -131,67 +132,67 @@ MATERIALS: dict[str, Material] = {
         needs_enclosure=False,
         ams_safe=False,
         heat_inserts="poor",
-        note="Гибкий, 95A. Прямой привод A1 mini его тянет, но подавать нужно с внешней "
-             "катушки — через AMS lite гибкие филаменты не идут.",
+        note="Flexible, 95A. The direct drive of the A1 mini handles it, but it has to be "
+             "fed from an external spool — flexibles do not run through an AMS lite.",
     ),
 }
 
-AVAILABLE = ("PLA", "PETG")   # что реально есть на руках
+AVAILABLE = ("PLA", "PETG")   # what is actually on the shelf
 
 
 def in_stock(material: "str | Material") -> bool:
-    """Есть ли этот пластик в наличии. Не запрет, а повод предупредить."""
+    """Whether this filament is on the shelf. Not a ban, just a reason to warn."""
     mat = material if isinstance(material, Material) else get(material)
     return mat.name in AVAILABLE
 
 
 def get(material: str) -> Material:
-    """Материал по имени, регистр и дефисы не важны: 'petg', 'pla_cf'."""
+    """A material by name; case and dashes do not matter: 'petg', 'pla_cf'."""
     key = material.strip().upper().replace("_", "-")
     if key in MATERIALS:
         return MATERIALS[key]
-    raise KeyError(f"неизвестный материал {material!r}; известны: {', '.join(MATERIALS)}")
+    raise KeyError(f"unknown material {material!r}; known ones: {', '.join(MATERIALS)}")
 
 
 def wall(perimeters: int = 2, printer: Printer = A1_MINI) -> MM:
-    """Толщина стенки в целых периметрах — чтобы слайсер не оставил пустоту внутри.
+    """Wall thickness in whole perimeters — so the slicer leaves no void inside.
 
-    2 периметра — минимум для неответственной стенки, 3-4 — для несущей.
+    2 perimeters is the minimum for a wall that carries nothing, 3-4 for one that does.
     """
     if perimeters < 1:
-        raise ValueError("периметров должно быть хотя бы 1")
+        raise ValueError("there must be at least 1 perimeter")
     return round(perimeters * printer.extrusion_width, 3)
 
 
 def clearance(material: str | Material, fit: str = "slip") -> MM:
-    """Зазор НА СТОРОНУ для посадки.
+    """Clearance PER SIDE for a fit.
 
-    press — запрессовка, снимается молотком; snug — с усилием руки;
-    slip — свободно ходит; free — заведомо с люфтом.
+    press — press fit, driven in with a mallet; snug — goes in with hand force;
+    slip — slides freely; free — deliberately loose.
 
-    Отверстие под вал 8 мм со скользящей посадкой:
+    A hole for an 8 mm shaft with a sliding fit:
         d = 8 + 2 * clearance("PETG", "slip")
     """
     mat = material if isinstance(material, Material) else get(material)
     if fit not in mat.clearances:
-        raise KeyError(f"неизвестная посадка {fit!r}; известны: {', '.join(mat.clearances)}")
+        raise KeyError(f"unknown fit {fit!r}; known ones: {', '.join(mat.clearances)}")
     return mat.clearances[fit]
 
 
 def compensate_shrink(nominal: MM, material: str | Material) -> MM:
-    """Увеличить размер в модели так, чтобы после остывания получился nominal."""
+    """Grow the size in the model so that after cooling it comes out at nominal."""
     mat = material if isinstance(material, Material) else get(material)
     return round(nominal / (1.0 - mat.shrink), 3)
 
 
 def supported(material: str | Material, printer: Printer = A1_MINI) -> list[str]:
-    """Причины, по которым материал не поедет на этом принтере. Пусто — всё в порядке."""
+    """Reasons this material will not run on this printer. Empty means all good."""
     mat = material if isinstance(material, Material) else get(material)
     reasons: list[str] = []
     if mat.needs_enclosure and not printer.enclosed:
-        reasons.append(f"{mat.name} требует закрытой камеры, а {printer.name} открытый")
+        reasons.append(f"{mat.name} needs an enclosure, and the {printer.name} is open")
     if mat.abrasive and not printer.hardened_nozzle:
-        reasons.append(f"{mat.name} абразивный, нужно закалённое сопло")
+        reasons.append(f"{mat.name} is abrasive, a hardened nozzle is required")
     if not mat.ams_safe and printer.ams:
-        reasons.append(f"{mat.name} нельзя подавать через AMS lite, только с внешней катушки")
+        reasons.append(f"{mat.name} cannot be fed through an AMS lite, only from an external spool")
     return reasons

@@ -1,5 +1,5 @@
-"""Проверочная деталь: пластина 40x24x6 с двумя отверстиями под M3,
-скруглёнными углами и фаской по верхнему контуру."""
+"""A smoke-test part: a 40x24x6 plate with two M3 holes, rounded corners and a chamfer
+along the top contour."""
 from build123d import *
 
 from forge import clearance, export_all
@@ -8,9 +8,9 @@ MAT = "PETG"
 
 L, W, H = 40.0, 24.0, 6.0
 M3 = 3.0
-HOLE_DX = 13.0        # смещение отверстий от центра по X
+HOLE_DX = 13.0        # offset of the holes from the centre along X
 
-hole_d = M3 + 2 * clearance(MAT, "free")   # проходное, винт должен входить свободно
+hole_d = M3 + 2 * clearance(MAT, "free")   # a clearance hole, the screw has to pass freely
 
 with BuildPart() as part:
     with BuildSketch() as plan:
@@ -25,9 +25,9 @@ with BuildPart() as part:
 
 paths = export_all(part.part, "smoke_test", material=MAT)
 
-print(f"материал   {MAT}")
-print(f"отверстие  {hole_d:.2f} мм под винт M{M3:.0f}")
-print(f"объём      {part.part.volume:.1f} мм³")
+print(f"material   {MAT}")
+print(f"hole       {hole_d:.2f} mm for an M{M3:.0f} screw")
+print(f"volume     {part.part.volume:.1f} mm³")
 bb = part.part.bounding_box()
-print(f"габариты   {bb.size.X:.1f} x {bb.size.Y:.1f} x {bb.size.Z:.1f} мм")
-print(f"файлы      {', '.join(str(v.name) for v in paths.values())}")
+print(f"size       {bb.size.X:.1f} x {bb.size.Y:.1f} x {bb.size.Z:.1f} mm")
+print(f"files      {', '.join(str(v.name) for v in paths.values())}")

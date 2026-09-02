@@ -16,9 +16,6 @@ is text, so it can be seen whole, edited surgically, and kept in history.
 default. Sources in `models/`, exports in `prints/`, the printer and filament reference
 in `forge/`, the tools in `tools/`. Details are in `README.md` in the root.
 
-**The tools report in Russian.** That is what their output looks like; read it as it is
-and say the essentials back to the user in the language of the conversation.
-
 **Every part gets its own folder in `prints/`.** Only the STL is in plain sight — that is
 what goes into the slicer; STEP, 3MF, previews and sections are tucked into `extras/` so
 they do not get in the way:
@@ -163,11 +160,11 @@ geometry is left untouched.
 It works in two steps: first it shows the voids it found, then it fills the chosen ones.
 Without `--fill` no file is written. A void cannot be told from a through hole
 automatically, so **the choice belongs to the human**: show the user the list and ask what
-to fill, do not decide it yourself. The list has hints — "0 open edges" means a closed
-void, and a bounding box like 3.9×3.9×5.2 mm gives away a screw hole.
+to fill, do not decide it yourself. The list has hints — "open edges 0" means a closed
+void, and a size like 3.9×3.9×5.2 mm gives away a screw hole.
 
 ```bash
-uv run tools/solidify.py incoming.stl                    # list the voids
+uv run tools/solidify.py incoming.stl               # list the voids
 uv run tools/solidify.py incoming.stl --fill 1     # -> prints/incoming_solid/
 ```
 

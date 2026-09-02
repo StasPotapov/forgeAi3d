@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""Проверка детали на печатопригодность.
+"""Printability check of a part.
 
     uv run tools/check.py prints/part/part.stl [--material petg] [--nozzle 0.4] [--bed 180x180x180]
     uv run tools/check.py prints/part/part.step --material petg
 
-Геометрию считает augura: по STEP — точно, по граням B-Rep; по STL — приблизительно,
-там нет ни толщины стенок, ни мелких вертикальных деталей. Поэтому рядом с STL ищется
-одноимённый STEP и берётся он. Качество самого меша (герметичность, нормали, число тел)
-проверяется по STL — augura этим не занимается.
+The geometry is computed by augura: off a STEP it is exact, from B-Rep faces; off an STL
+it is approximate — there is neither wall thickness nor small vertical features there. So
+a STEP of the same name is looked for next to the STL and used instead. The quality of the
+mesh itself (watertightness, normals, number of bodies) is checked off the STL — augura
+does not deal with that.
 
-Код возврата 1 — нашлись проблемы, из-за которых печатать не стоит.
-Предупреждения на код возврата не влияют: они зависят от ориентации детали,
-а её выбирают уже в слайсере.
+Exit code 1 means problems were found that make printing a bad idea.
+Warnings do not affect the exit code: they depend on the orientation of the part, and
+that is chosen in the slicer.
 """
 import argparse
 import dataclasses
@@ -25,35 +26,36 @@ from build123d import import_step
 
 from forge import A1_MINI, find_step, get, in_stock, supported, wall
 
-# Тонкая стенка у augura — предупреждение. Здесь это отказ: стенка тоньше двух
-# периметров печатается как пустота между контурами, деталь выходит бумажной.
-# Но augura отдаёт минимум, а минимум сам по себе не показателен: у фаски, уклона
-# и у кромки выдавленной буквы толщина по построению стремится к нулю. Поэтому
-# решает доля поверхности тоньше порога, а минимум остаётся справкой.
+# A thin wall is a warning in augura. Here it is a failure: a wall thinner than two
+# perimeters prints as a void between the contours and the part comes out papery.
+# But augura reports the minimum, and the minimum alone means little: on a chamfer, a
+# draft angle or the edge of a raised letter the thickness tends to zero by construction.
+# So the verdict goes by the share of the surface below the threshold, and the minimum
+# stays in the report for reference.
 THIN_SAMPLES = 1500
-THIN_SHARE_LIMIT = 5.0   # % поверхности, после которых это уже не край фаски
+THIN_SHARE_LIMIT = 5.0   # % of the surface beyond which this is no longer a chamfer edge
 
-# Суть находки по-русски; подробности augura отдаёт своим текстом, с числами,
-# и переписывать их значило бы пересказывать библиотеку своими словами.
-KIND_RU = {
-    "overhang": "свес",
-    "bridge": "мост",
-    "tip_over": "опрокинется",
-    "brim": "нужен brim",
-    "thin_wall": "тонкая стенка",
-    "thin_feature": "тонкая деталь",
-    "min_feature": "мелкая деталь",
-    "bed_fit": "не влезает на стол",
-    "not_manifold": "меш не замкнут",
+# A short label for each finding; the details come from augura in its own words, with the
+# numbers, and rewriting them would mean paraphrasing the library.
+KIND_LABEL = {
+    "overhang": "overhang",
+    "bridge": "bridge",
+    "tip_over": "will tip over",
+    "brim": "brim needed",
+    "thin_wall": "thin wall",
+    "thin_feature": "thin feature",
+    "min_feature": "small feature",
+    "bed_fit": "does not fit the bed",
+    "not_manifold": "mesh is not closed",
 }
 
-# Насколько лучшая поза должна быть лучше текущей, чтобы про неё стоило говорить.
-ORIENT_GAIN = 0.25   # на столько должна упасть площадь свесов, доля
-ORIENT_FLOOR = 50.0  # мм²; меньше этого свесов и так нет, молчим
+# How much better the best orientation has to be before it is worth mentioning.
+ORIENT_GAIN = 0.25   # the overhang area has to drop by this fraction
+ORIENT_FLOOR = 50.0  # mm²; below this there are hardly any overhangs, so stay quiet
 
-# высота / меньшая сторона основания: выше этого высокую деталь на ездящем столе
-# отрывает инерцией. augura считает опрокидывание по центру масс и про разгон
-# стола не знает, поэтому проверка своя
+# height / shorter side of the base: above this, a tall part on a moving bed gets torn
+# off by inertia. augura computes tipping from the centre of mass and knows nothing about
+# the acceleration of the bed, so this check is our own
 TIPPING_ASPECT = 4.0
 
 
@@ -61,17 +63,17 @@ def parse_bed(text: str) -> tuple[float, float, float]:
     try:
         dims = tuple(float(v) for v in text.lower().split("x"))
     except ValueError:
-        sys.exit(f"--bed ждёт формат ШxГxВ, получил {text!r}")
+        sys.exit(f"--bed expects the format WxDxH, got {text!r}")
     if len(dims) != 3:
-        sys.exit(f"--bed ждёт три размера ШxГxВ, получил {text!r}")
+        sys.exit(f"--bed expects three dimensions WxDxH, got {text!r}")
     if any(d <= 0 for d in dims):
-        sys.exit(f"--bed: размеры должны быть положительными, получил {text!r}")
+        sys.exit(f"--bed: the dimensions have to be positive, got {text!r}")
     return dims  # type: ignore[return-value]
 
 
 def fits_rotated(extents: tuple[float, float, float] | None,
                  bed: tuple[float, float, float]) -> bool:
-    """Влезает ли деталь на стол, если развернуть её на 90° в плоскости стола."""
+    """Whether the part fits the bed when turned 90° in the plane of the bed."""
     if extents is None:
         return False
     x, y, z = extents
@@ -79,15 +81,15 @@ def fits_rotated(extents: tuple[float, float, float] | None,
 
 
 def thin_share(mesh: trimesh.Trimesh, floor: float) -> float | None:
-    """Доля поверхности тоньше порога, %. None — посчитать не удалось.
+    """Share of the surface thinner than the threshold, %. None means it could not be computed.
 
-    Луч пускается внутрь тела от точки на поверхности против её нормали.
+    A ray is cast into the solid from a point on the surface, against its normal.
     """
     if not mesh.is_watertight:
         return None
     points, face_ids = trimesh.sample.sample_surface(mesh, THIN_SAMPLES)
     normals = mesh.face_normals[face_ids]
-    origins = points - normals * 1e-3          # чуть внутрь, чтобы не поймать старт
+    origins = points - normals * 1e-3          # a little inside, so the start is not hit
     locs, ray_ids, _ = mesh.ray.intersects_location(
         ray_origins=origins, ray_directions=-normals, multiple_hits=False
     )
@@ -98,7 +100,7 @@ def thin_share(mesh: trimesh.Trimesh, floor: float) -> float | None:
 
 
 def as_mesh(shape) -> trimesh.Trimesh | None:
-    """Тесселяция STEP — чтобы считать долю и когда меша на входе не было."""
+    """Tessellation of the STEP — to compute the share even when no mesh came in."""
     try:
         vertices, faces = shape.tessellate(tolerance=0.05)
         return trimesh.Trimesh(
@@ -110,16 +112,17 @@ def as_mesh(shape) -> trimesh.Trimesh | None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("model", type=Path, help="STL или STEP")
+    ap.add_argument("model", type=Path, help="STL or STEP")
     ap.add_argument("--material", default="PLA", help="PLA, PETG, PLA-CF, ASA, TPU")
-    ap.add_argument("--bed", default=None, help="стол ШxГxВ, мм (по умолчанию из профиля принтера)")
-    ap.add_argument("--nozzle", type=float, default=None, help="диаметр сопла, мм")
+    ap.add_argument("--bed", default=None, help="bed WxDxH, mm (from the printer profile "
+                                                "by default)")
+    ap.add_argument("--nozzle", type=float, default=None, help="nozzle diameter, mm")
     ap.add_argument("--no-orientation", action="store_true",
-                    help="не подбирать ориентацию (перебор поз — самая долгая часть)")
+                    help="do not search for an orientation (the slowest part of the check)")
     args = ap.parse_args()
 
     if not args.model.exists():
-        sys.exit(f"нет файла {args.model}")
+        sys.exit(f"no such file: {args.model}")
 
     try:
         mat = get(args.material)
@@ -129,9 +132,10 @@ def main() -> None:
     printer = A1_MINI
     if args.nozzle is not None:
         if args.nozzle <= 0:
-            sys.exit("--nozzle должен быть положительным")
-        # вместе с соплом меняется и типовой слой: сопло 0.8 не печатает слоем 0.2,
-        # иначе проверка «ступенька тоньше слоя» сравнивала бы с чужим числом
+            sys.exit("--nozzle has to be positive")
+        # the typical layer changes along with the nozzle: a 0.8 nozzle does not print a
+        # 0.2 layer, otherwise the "step thinner than a layer" check would compare against
+        # a number from another printer
         printer = dataclasses.replace(
             printer,
             nozzle=args.nozzle,
@@ -148,93 +152,98 @@ def main() -> None:
     warnings: list[str] = []
     extents: tuple[float, float, float] | None = None
 
-    print(f"файл          {args.model}")
-    print(f"материал      {mat.name}  (усадка {mat.shrink * 100:.1f}%, размягчается от {mat.hdt:.0f} °C)")
-    print(f"принтер       {printer.name}, сопло {printer.nozzle} мм")
+    print(f"file          {args.model}")
+    print(f"material      {mat.name}  (shrinkage {mat.shrink * 100:.1f}%, softens from {mat.hdt:.0f} °C)")
+    print(f"printer       {printer.name}, {printer.nozzle} mm nozzle")
 
-    # --- качество меша: только по STL, augura этого не умеет ---
+    # --- mesh quality: off the STL only, augura cannot do this ---
     mesh = None
     if is_mesh_input:
         try:
             mesh = trimesh.load_mesh(args.model)
         except Exception as exc:
-            sys.exit(f"не удалось прочитать {args.model}: {exc}")
+            sys.exit(f"could not read {args.model}: {exc}")
         if isinstance(mesh, trimesh.Scene):
             mesh = mesh.to_mesh()
 
         size = mesh.extents
         extents = (float(size[0]), float(size[1]), float(size[2]))
-        print(f"габариты      {size[0]:.2f} x {size[1]:.2f} x {size[2]:.2f} мм")
-        print(f"треугольников {len(mesh.faces)}")
-        print(f"тел в файле   {mesh.body_count}")
+        print(f"size          {size[0]:.2f} x {size[1]:.2f} x {size[2]:.2f} mm")
+        print(f"triangles     {len(mesh.faces)}")
+        print(f"bodies        {mesh.body_count}")
 
         if mesh.is_watertight:
-            print(f"объём         {mesh.volume / 1000:.2f} см³   (герметичный меш)")
+            print(f"volume        {mesh.volume / 1000:.2f} cm³   (watertight mesh)")
         else:
-            problems.append("меш не герметичный — слайсер может напечатать мусор, нужен repair")
-            print("объём         — (меш НЕ герметичный)")
+            problems.append("the mesh is not watertight — the slicer may print rubbish, "
+                            "it needs repair")
+            print("volume        — (the mesh is NOT watertight)")
 
         if not mesh.is_winding_consistent:
-            problems.append("нормали развёрнуты непоследовательно")
+            problems.append("the normals are wound inconsistently")
 
         degenerate = int((~mesh.nondegenerate_faces(height=1e-4)).sum())
         if degenerate:
-            problems.append(f"вырожденных треугольников: {degenerate}")
+            problems.append(f"degenerate triangles: {degenerate}")
 
-    # --- профиль принтера и наличие материала ---
+    # --- printer profile and material availability ---
     problems += supported(mat, printer)
     if not in_stock(mat):
-        warnings.append(f"{mat.name} не числится в наличии — проверь, есть ли катушка")
+        warnings.append(f"{mat.name} is not listed as being on the shelf — check whether "
+                        "you have a spool")
 
-    # --- геометрия: augura ---
+    # --- geometry: augura ---
     shape = None
     if step is not None:
         try:
             shape = import_step(str(step))
         except Exception as exc:
             if mesh is None:
-                sys.exit(f"не удалось прочитать {step}: {exc}")
-            warnings.append(f"не удалось прочитать {step.name}, анализ пойдёт по мешу: {exc}")
+                sys.exit(f"could not read {step}: {exc}")
+            warnings.append(f"could not read {step.name}, the analysis will run off the "
+                            f"mesh: {exc}")
 
     if shape is not None:
-        source = f"{step.name} (точный B-Rep)"
+        source = f"{step.name} (exact B-Rep)"
         if not is_mesh_input:
             bb = shape.bounding_box()
             extents = (bb.size.X, bb.size.Y, bb.size.Z)
-            print(f"габариты      {bb.size.X:.2f} x {bb.size.Y:.2f} x {bb.size.Z:.2f} мм")
-            print(f"тел в файле   {len(shape.solids())}")
-            print(f"объём         {shape.volume / 1000:.2f} см³")
+            print(f"size          {bb.size.X:.2f} x {bb.size.Y:.2f} x {bb.size.Z:.2f} mm")
+            print(f"bodies        {len(shape.solids())}")
+            print(f"volume        {shape.volume / 1000:.2f} cm³")
         report = augura.analyze(
             shape,
             support_angle=mat.support_angle,
             build_volume=printer.bed,
-            # порог тонкой стенки augura считает как nozzle * min_perimeters, а у нас
-            # два периметра это 2 * ширину линии — иначе её 0.80 разойдётся с wall() 0.84
+            # augura computes the thin-wall threshold as nozzle * min_perimeters, while
+            # two perimeters here means 2 * the line width — otherwise its 0.80 would
+            # disagree with wall()'s 0.84
             nozzle=printer.extrusion_width,
             min_perimeters=2,
             min_feature=printer.nozzle,
             max_bridge=mat.max_bridge,
         )
     elif mesh is not None:
-        source = f"{args.model.name} (меш, приблизительно)"
+        source = f"{args.model.name} (mesh, approximate)"
         warnings.append(
-            "мелкие вертикальные детали не проверены — для этого нужен STEP рядом "
-            "с мешем; толщина стенки ниже посчитана по треугольникам, приблизительно"
+            "small vertical features were not checked — that needs a STEP next to the "
+            "mesh; the wall thickness below was computed from triangles, approximately"
         )
         report = augura.analyze_mesh(
             mesh, support_angle=mat.support_angle, build_volume=printer.bed
         )
     else:
-        sys.exit(f"не удалось разобрать {args.model}")
+        sys.exit(f"could not parse {args.model}")
 
     floor = wall(2, printer)
-    print(f"анализ по     {source}")
-    print(f"стенка        минимум {floor:.2f} мм = 2 периметра при сопле {printer.nozzle} мм")
+    print(f"analysed from {source}")
+    print(f"wall          minimum {floor:.2f} mm = 2 perimeters with a {printer.nozzle} mm nozzle")
 
-    # доля поверхности тоньше порога — считается один раз: тесселяция STEP и 1500
-    # лучей не бесплатны, а находка thin_wall может прийти не одна.
-    # По мешу augura толщину не смотрит вовсе, поэтому там считаем сами и без повода:
-    # правка чужих STL — обычное дело, и оставлять их вовсе без проверки нельзя.
+    # the share of the surface below the threshold is computed once: tessellating the STEP
+    # and casting 1500 rays is not free, and there can be more than one thin_wall finding.
+    # On a mesh augura does not look at thickness at all, so there it is computed
+    # unconditionally: editing someone else's STL is routine, and leaving it unchecked
+    # is not an option.
     thin = None
     by_mesh_only = shape is None
     if by_mesh_only or any(f.kind == "thin_wall" for f in report.findings):
@@ -243,63 +252,67 @@ def main() -> None:
 
     if by_mesh_only:
         if thin is None:
-            warnings.append("толщину стенки оценить не удалось — меш негерметичный")
+            warnings.append("the wall thickness could not be estimated — the mesh is not "
+                            "watertight")
         elif thin > THIN_SHARE_LIMIT:
             problems.append(
-                f"тоньше {floor:.2f} мм — {thin:.1f}% поверхности "
-                "(по мешу, приблизительно: точное значение даст STEP)"
+                f"thinner than {floor:.2f} mm — {thin:.1f}% of the surface "
+                "(from the mesh, approximately: an exact figure needs a STEP)"
             )
         else:
-            print(f"толщина       тоньше {floor:.2f} мм — {thin:.1f}% поверхности (по мешу)")
+            print(f"thickness     thinner than {floor:.2f} mm — {thin:.1f}% of the surface (from the mesh)")
 
     for finding in report.findings:
-        # префикс augura про приблизительность дублирует строку «анализ по»
+        # augura's prefix about approximation repeats the "analysed from" line
         message = finding.message.removeprefix("[mesh, approximate] ")
-        kind = KIND_RU.get(finding.kind, finding.kind)
+        kind = KIND_LABEL.get(finding.kind, finding.kind)
         text = f"{kind}: {message}"
         if finding.area is not None:
-            text = f"{text} ({finding.area:.0f} мм²)"
+            text = f"{text} ({finding.area:.0f} mm²)"
         if finding.kind == "thin_wall":
-            # решает доля, а не минимум: одна кромка фаски или буквы — не брак
+            # the share decides, not the minimum: a single chamfer or letter edge is not a defect
             if thin is None:
-                warnings.append(f"{text} — какую долю поверхности это занимает, оценить не удалось")
+                warnings.append(f"{text} — the share of the surface this takes up could "
+                                "not be estimated")
             elif thin > THIN_SHARE_LIMIT:
-                problems.append(f"{text}; тоньше {floor:.2f} мм — {thin:.1f}% поверхности")
+                problems.append(f"{text}; thinner than {floor:.2f} mm — {thin:.1f}% of the surface")
             else:
                 warnings.append(
-                    f"{text}, но это {thin:.1f}% поверхности — похоже на кромку фаски "
-                    "или надписи, а не на стенку"
+                    f"{text}, but that is {thin:.1f}% of the surface — this looks like the "
+                    "edge of a chamfer or of a label rather than a wall"
                 )
         elif finding.kind == "bed_fit" and fits_rotated(extents, printer.bed):
-            # augura меряет габарит по осям как есть, а деталь на стол кладут как удобно
+            # augura measures the bounding box along the axes as they are, while a part is
+            # placed on the bed whichever way is convenient
             warnings.append(
-                f"{text} — но влезает после поворота на 90° в плоскости стола"
+                f"{text} — but it fits after a 90° turn in the plane of the bed"
             )
         elif finding.kind == "not_manifold" and mesh is not None and not mesh.is_watertight:
-            pass    # про негерметичность уже сказано выше, своими словами
+            pass    # the watertightness was already reported above, in our own words
         elif finding.severity == "error":
             problems.append(text)
         elif finding.severity == "warning":
             warnings.append(text)
         else:
-            print(f"инфо          {text}")
+            print(f"info          {text}")
 
-    # --- максимальная высота слоя из самой мелкой вертикальной ступеньки ---
+    # --- maximum layer height from the smallest vertical step ---
     if shape is not None:
         step_h = augura.min_vertical_feature(shape)
         if step_h is not None:
-            # печатаем, только когда ступенька реально ограничивает слой;
-            # у плоской пластины она равна её высоте и ни о чём не говорит
+            # print it only when the step really limits the layer; on a flat plate it
+            # equals the height of the plate and says nothing
             if step_h < 5 * printer.layer_height:
-                print(f"слой          не толще {step_h:.2f} мм "
-                      f"(сейчас в профиле {printer.layer_height} мм)")
+                print(f"layer         no thicker than {step_h:.2f} mm "
+                      f"(the profile currently says {printer.layer_height} mm)")
             if step_h < printer.layer_height:
                 problems.append(
-                    f"самая мелкая ступенька {step_h:.2f} мм тоньше слоя "
-                    f"{printer.layer_height} мм — деталь на ней пропадёт, нужен слой мельче"
+                    f"the smallest step of {step_h:.2f} mm is thinner than the "
+                    f"{printer.layer_height} mm layer — the feature will disappear, "
+                    "a thinner layer is needed"
                 )
 
-    # --- ориентация ---
+    # --- orientation ---
     if shape is not None and not args.no_orientation:
         scores = augura.orientation_scores(
             shape, support_angle=mat.support_angle, build_volume=printer.bed,
@@ -312,34 +325,34 @@ def main() -> None:
             if current.overhang_area > ORIENT_FLOOR and gain > current.overhang_area * ORIENT_GAIN:
                 rx, ry, rz = best.rotation
                 warnings.append(
-                    f"положить иначе — поворот ({rx:g}, {ry:g}, {rz:g})° оставит "
-                    f"{best.overhang_area:.0f} мм² свесов вместо {current.overhang_area:.0f}"
+                    f"lay it differently — a ({rx:g}, {ry:g}, {rz:g})° rotation leaves "
+                    f"{best.overhang_area:.0f} mm² of overhangs instead of {current.overhang_area:.0f}"
                 )
 
-    # высокая узкая деталь на принтере с ездящим столом
+    # a tall narrow part on a printer with a moving bed
     if printer.bed_slinger and extents is not None:
         seen = {f.kind for f in report.findings}
         base = min(extents[0], extents[1])
         if base > 0 and extents[2] / base > TIPPING_ASPECT and not (
-            seen & {"tip_over", "brim"}      # augura уже сказала про то же самое
+            seen & {"tip_over", "brim"}      # augura has already said the same thing
         ):
             warnings.append(
-                f"высота {extents[2]:.0f} мм при основании {base:.0f} мм — "
-                f"на {printer.name} ездит стол, деталь может оторвать инерцией. "
-                "Нужен brim или печать набок"
+                f"a height of {extents[2]:.0f} mm on a base of {base:.0f} mm — the bed of "
+                f"the {printer.name} moves, so inertia may tear the part off. "
+                "It needs a brim, or printing on its side"
             )
 
     if warnings:
-        print("\nПредупреждения (на код возврата не влияют):")
+        print("\nWarnings (they do not affect the exit code):")
         for w in warnings:
             print(f"  - {w}")
 
     if problems:
-        print("\nПроблемы:")
+        print("\nProblems:")
         for p in problems:
             print(f"  - {p}")
         sys.exit(1)
-    print("\nПроблем не найдено.")
+    print("\nNo problems found.")
 
 
 if __name__ == "__main__":
