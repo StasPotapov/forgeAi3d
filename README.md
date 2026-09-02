@@ -4,6 +4,13 @@
 
 A workspace for designing 3D-printable parts **together with an AI agent**.
 
+I did not write a CAD engine. forgeAi3d is an assembly of other people's
+projects — a CAD kernel, a fastener library, a printability analyser, a renderer, mesh
+tooling — wired into a single loop and wrapped in CLIs so the agent can call them itself,
+read the output and take the next step from it: measure the part, look at the preview,
+change one constant. What to call and when lives in the skill; the full list is in the
+table below.
+
 > The tools and the Claude Code skill speak Russian — that is what the output samples
 > below look like. The code, the CLI flags and this file are in English; translating the
 > messages is a small, self-contained change if you need it.
@@ -21,13 +28,27 @@ what you need → models/part.py → prints/part/part.stl → print
 
 ![contact sheet of the clearance comb](docs/fit_test.png)
 
-Stack: [build123d](https://github.com/gumyr/build123d) (B-Rep on OCCT — real fillets,
-chamfers and STEP), [augura](https://github.com/pzfreo/augura) (printability from exact
-geometry rather than triangles), [bd_warehouse](https://github.com/gumyr/bd_warehouse)
-(screws, nuts, bearings and threads to standard),
-[trimesh](https://github.com/mikedh/trimesh) (inspecting and repairing other people's
-meshes), [OpenSCAD](https://openscad.org) headless (rendering previews so the agent can
-look at the result with its own eyes).
+## What it is made of
+
+Little of this is my own code: a printer profile and a filament reference (`forge/`),
+four CLI wrappers (`tools/`) and the skill. The heavy lifting is done by the projects
+below.
+
+| Tool | What it does here |
+|---|---|
+| [build123d](https://github.com/gumyr/build123d) | The CAD kernel. A part is described in Python and the geometry is B-Rep on OpenCascade: real fillets, chamfers and STEP export |
+| [OCP](https://github.com/CadQuery/OCP) | Python bindings for [OpenCascade](https://github.com/Open-Cascade-SAS/OCCT), the kernel under build123d. `measure.py` talks to it directly — it reads surface types and tells a hole from a boss or a fillet by them |
+| [bd_warehouse](https://github.com/gumyr/bd_warehouse) | Off-the-shelf fasteners for build123d: screws, nuts, bearings and threads to standard, so M3 dimensions are never recalled from memory |
+| [augura](https://github.com/pzfreo/augura) | Printability checks off the STEP — overhangs, bridges, wall thickness, tipping, orientation search. From the exact faces of the solid rather than from triangles |
+| [trimesh](https://github.com/mikedh/trimesh) | Everything mesh-side: loading STL, watertightness, normals, ray queries (thickness, internal voids), repairing other people's models |
+| [manifold3d](https://github.com/elalish/manifold) | The boolean backend for trimesh — without it mesh differences and unions fall apart |
+| [rtree](https://github.com/Toblerity/rtree) | The spatial index trimesh's ray queries rely on |
+| [numpy](https://github.com/numpy/numpy) | Vertex and normal arrays, all the geometric arithmetic in the checks and in the overhang highlighting |
+| [networkx](https://github.com/networkx/networkx) | The face-adjacency graph in `solidify.py`: this is how inner shells and the rims to be capped are found |
+| [Pillow](https://github.com/python-pillow/Pillow) | Trimming the margins of renders and stitching the views into one contact sheet |
+| [OpenSCAD](https://github.com/openscad/openscad) | Headless PNG rendering and the boolean section cut. The only external program — everything else is a Python package |
+| [uv](https://github.com/astral-sh/uv) | Dependencies and running: `uv run` instead of hand-managed venvs |
+| [Claude Code](https://github.com/anthropics/claude-code) | The agent itself. The skill in `skill/` teaches it the loop — what to call, how to read the output and what to edit next |
 
 ## Why not a GUI editor with MCP
 
@@ -89,9 +110,17 @@ printed legs snap along the layers; a 6 mm collar so it hides under the screw's 
 
 ![the plug in section](docs/dowel.png)
 
+Then came the loop this is all for. The first version spun in the hole: ring barbs hold
+against pull-out, but an axisymmetric body has nothing to bite with against torque, so the
+screw dragged the plug along instead of threading into it. One sentence — "it spins" — and
+the model was reworked: a through slit along the body (the halves spread apart and wedge
+the plug into the hole), four longitudinal ribs against rotation, and a pilot hole 0.3 mm
+wider, so the screw cuts a thread rather than tearing the part loose.
+
 The model is `models/dowel_5mm.py`, and everything in it turns on constants: `BARB_OVER`
-for how far the barbs stand out, `PILOT_TOP` and `PILOT_BOT` for the inner cone that makes
-the screw bite harder as it goes, `SLOT` to cut a through slit. Printed on an A1 mini.
+for how far the barbs stand out, `RIB_COUNT` and `RIB_OVER` for the ribs, `PILOT_TOP` and
+`PILOT_BOT` for the inner cone that makes the screw bite harder as it goes, `SLOT_W` and
+`SLOT_ANG` for the slit. Printed standing up on an A1 mini.
 
 ### A toy katana blade — someone else's model, filled
 
