@@ -11,9 +11,9 @@ read the output and take the next step from it: measure the part, look at the pr
 change one constant. What to call and when lives in the skill; the full list is in the
 table below.
 
-> The tools and the Claude Code skill speak Russian — that is what the output samples
-> below look like. The code, the CLI flags and this file are in English; translating the
-> messages is a small, self-contained change if you need it.
+> The tools report in Russian — that is what the output samples below look like. The
+> code, the CLI flags, this file and the skill in `skill/en/` are in English; translating
+> the tool messages is a small, self-contained change if you need it.
 
 The idea is simple: a part is a Python file, not a project inside a GUI. The agent sees
 it whole, edits one line, and keeps the history. You describe what you need and get an
@@ -48,7 +48,7 @@ below.
 | [Pillow](https://github.com/python-pillow/Pillow) | Trimming the margins of renders and stitching the views into one contact sheet |
 | [OpenSCAD](https://github.com/openscad/openscad) | Headless PNG rendering and the boolean section cut. The only external program — everything else is a Python package |
 | [uv](https://github.com/astral-sh/uv) | Dependencies and running: `uv run` instead of hand-managed venvs |
-| [Claude Code](https://github.com/anthropics/claude-code) | The agent itself. The skill in `skill/` teaches it the loop — what to call, how to read the output and what to edit next |
+| [Claude Code](https://github.com/anthropics/claude-code) | The agent the skill in `skill/` is written for — what to call, how to read the output and what to edit next. The format is its own, but the contents are plain markdown: any other agent can be taught it with one request |
 
 ## Why not a GUI editor with MCP
 
@@ -324,20 +324,28 @@ The chosen shell is removed and the resulting rim is capped with a fan from its 
 The outer geometry is never touched — the original outer triangles are kept, so the
 profile and sharp edges survive 1:1.
 
-## The Claude Code skill
+## The skill for your agent
 
-`skill/forgeAi3d/` holds a skill that teaches the agent this loop: verify dimensions as
-numbers, always look at the preview, run the check before handing anything over, take
-clearances from `forge` instead of inventing them, look up hardware dimensions in a
-datasheet instead of making them up, and edit a constant rather than rebuild the model.
-Inside are a build123d and bd_warehouse cheat sheet (every example executed, not written
-from memory) and design rules for FDM.
+The skill teaches the agent this loop: verify dimensions as numbers, always look at the
+preview, run the check before handing anything over, take clearances from `forge` instead
+of inventing them, look up hardware dimensions in a datasheet instead of making them up,
+and edit a constant rather than rebuild the model. Inside are a build123d and bd_warehouse
+cheat sheet (every example executed, not written from memory) and design rules for FDM.
+
+It comes in two versions with the same contents: `skill/en/forgeAi3d` (English) and
+`skill/ru/forgeAi3d` (Russian). Install one — whichever language you would rather read:
 
 ```bash
-ln -s ~/dev/forgeAi3d/skill/forgeAi3d ~/.claude/skills/forgeAi3d
+ln -s ~/dev/forgeAi3d/skill/en/forgeAi3d ~/.claude/skills/forgeAi3d
 ```
 
 It then triggers from context, or is invoked as `/forgeAi3d <what you need>`.
+
+**The format is Claude Code's, but nothing here is tied to it.** Inside it is ordinary
+markdown: instructions, tables and reference sheets. If you work with a different agent,
+ask it to rewrite `SKILL.md` and `references/` into the format it understands — the rules
+and the numbers carry over as they are, only the wrapper changes. The install and
+invocation examples in this file are the Claude Code ones.
 
 The skill is generic: the specific hardware comes from `forge/spec.py`, not from its own
 text.
@@ -380,7 +388,7 @@ forgeAi3d when a part has to be stored, reproduced and refined after each print.
 models/    part sources (.py, build123d)
 forge/     printer profile, filament reference, export, cache of looked-up dimensions
 tools/     preview.py — render, check.py — printability, measure.py — dimensions, solidify.py — fill cavities
-skill/     the Claude Code skill
+skill/     the agent skill: en/ and ru/, same contents
 scripts/   sync-skill.sh — sync the skill with its leading copy
 docs/      images for this file
 prints/    one folder per part: the STL in plain view, the rest in extras/ (gitignored)

@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Синхронизирует скилл из dotfiles (ведущая копия) в этот репозиторий.
+# Синхронизирует русский скилл из dotfiles (ведущая копия) в этот репозиторий.
 # Ведущая копия живёт в ~/dotfiles/claude/.claude/skills/forgeAi3d и раздаётся
 # через stow в ~/.claude/skills. Здесь лежит копия для тех, у кого dotfiles нет.
+#
+# Английская версия (skill/en/forgeAi3d) ведётся прямо в репозитории и этим
+# скриптом не трогается: её ведущая копия здесь, а не в dotfiles.
 set -euo pipefail
 
 SRC="${FORGEAI3D_SKILL_SRC:-$HOME/dotfiles/claude/.claude/skills/forgeAi3d}"
-DST="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/skill/forgeAi3d"
+DST="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/skill/ru/forgeAi3d"
 
 if [[ ! -d "$SRC" ]]; then
   echo "Ведущей копии нет: $SRC" >&2
@@ -29,4 +32,4 @@ fi
 rm -rf "$DST"
 mkdir -p "$(dirname "$DST")"
 cp -R "$SRC" "$DST"
-echo "Скилл скопирован: $SRC -> $DST"
+echo "Русский скилл скопирован: $SRC -> $DST"
