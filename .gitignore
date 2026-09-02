@@ -4,3 +4,5 @@ prints/
 .DS_Store
 result.json
 forge/specs_cache.json
+.idea/
+.ruff_cache/
