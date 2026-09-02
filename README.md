@@ -11,10 +11,6 @@ read the output and take the next step from it: measure the part, look at the pr
 change one constant. What to call and when lives in the skill; the full list is in the
 table below.
 
-> The tools report in Russian — that is what the output samples below look like. The
-> code, the CLI flags, this file and the skill in `skill/en/` are in English; translating
-> the tool messages is a small, self-contained change if you need it.
-
 The idea is simple: a part is a Python file, not a project inside a GUI. The agent sees
 it whole, edits one line, and keeps the history. You describe what you need and get an
 STL, a preview and a printability report. You print it, say what is wrong, and one
@@ -96,7 +92,8 @@ The path to the STL is enough for every tool: they find the STEP for exact analy
 themselves.
 
 `models/fit_test.py` is a clearance comb: ten M3 holes with per-side clearances from 0.00
-to 0.45 mm. Start there — see "Calibration" below.
+to 0.45 mm. Printing it is optional — it is there for when the typical clearances do not
+work out (see "Clearance calibration" below).
 
 ## Two real examples
 
@@ -131,12 +128,12 @@ without touching the outer shape.
 
 ```
 $ uv run tools/solidify.py katana.stl
-katana.stl: 5161 мм³, найдено внутренних пустот: 1
-  [1]  1496 треугольников, площадь 4013.6 мм², габарит 11.2×9.7×168.8 мм, открытых рёбер 42
+katana.stl: 5161 mm³, internal voids found: 1
+  [1]  1496 triangles, area   4013.6 mm², size 11.2×9.7×168.8 mm, open edges 42
 
 $ uv run tools/solidify.py katana.stl --fill 1
-убрано внутренних треугольников: 1496 из 3726
-объём: было 5161 мм³ → стало 11335 мм³
+internal triangles removed: 1496 of 3726
+volume: was 5161 mm³ → now 11335 mm³
 ```
 
 The outer triangles are taken from the original untouched, so the twisted profile and the
@@ -303,7 +300,7 @@ print, a scanned shell) prints empty: the slicer honestly sees the void and puts
 infill inside.
 
 ```bash
-uv run tools/solidify.py incoming.stl                          # show what is inside
+uv run tools/solidify.py incoming.stl               # show what is inside
 uv run tools/solidify.py incoming.stl --fill 1     # -> prints/incoming_solid/
 ```
 
@@ -311,8 +308,8 @@ First the tool lists the voids it found — triangle count, area, bounding box, 
 many open edges the void has (zero means a sealed cavity):
 
 ```
-katana_orig.stl: 5161 mm3, internal voids found: 1
-  [1]  1496 triangles, area 4013.6 mm2, bounds 11.2x9.7x168.8 mm, open edges 42
+katana_orig.stl: 5161 mm³, internal voids found: 1
+  [1]  1496 triangles, area   4013.6 mm², size 11.2×9.7×168.8 mm, open edges 42
 ```
 
 **You choose what to fill.** Telling a cavity from a through hole automatically is not
@@ -350,17 +347,66 @@ invocation examples in this file are the Claude Code ones.
 The skill is generic: the specific hardware comes from `forge/spec.py`, not from its own
 text.
 
-## Calibration
+## Clearance calibration — optional
 
-The clearances and shrinkage in `forge/spec.py` are typical working values, not spec
-sheet constants. They depend on the spool, the humidity and the print profile.
+The clearances in `forge/spec.py` are typical values that work for most people. There is
+no need to start with calibration: print a part, and if the fits come out right, the
+subject is closed.
 
-To get your own: change `MAT` in `models/fit_test.py`, print the comb once per filament
-(the material is embossed on the part and ends up in the file name), push an M3 screw
-into every hole and find two numbers — where the screw goes in with hand pressure
-(`snug`) and where it moves freely without play (`slip`). Hole N has a per-side clearance
-of `0.05 * N`; the 0.00–0.45 range covers all four fits. Put those numbers into
-`clearances` for that material.
+Calibration is for when the same thing keeps happening: screws go in tight on every part,
+or everything rattles. That is not the model — it is your particular combination of
+printer, spool and profile printing holes differently from what the reference assumes.
+
+<details>
+<summary><b>Why, what it buys you and how it is done</b> — expand</summary>
+
+<br>
+
+**Why any of these numbers exist.** A hole prints smaller than nominal: the layer is laid
+along the chord and the cooling plastic pulls the edges inwards. That is why nobody draws
+3.00 mm for an M3 screw — they draw 3.00 plus a clearance. How much larger depends on
+temperature, speed, cooling, the humidity of the spool and even the batch of filament, so
+there is no one universal number.
+
+**There is no ready-made library of these numbers.** There are reference ranges in
+articles and online calculators, but they all give the same 0.1–0.3 mm spread that is
+already in `forge/spec.py`. The only way to get your own figure is to print and measure.
+
+**What it buys you.** The four fits (`press`, `snug`, `slip`, `free`) start meaning
+exactly what they say: a press fit holds, and "slides freely" stops rattling. Calibrate
+once, edit one file, and every future part computes its clearances from your numbers.
+
+**How it is done.** The comb in `models/fit_test.py` is a plate with ten holes for an M3
+screw whose clearance grows in 0.05 mm steps per side: hole N has a clearance of
+`0.05 * N`, and the 0.00–0.45 range covers all four fits.
+
+1. change `MAT` in `models/fit_test.py` to the filament you want (the material is embossed
+   on the part itself and goes into the file name, so combs of different filaments do not
+   get mixed up);
+2. run `uv run python models/fit_test.py` and print the result;
+3. push an M3 screw into each hole in turn and find two numbers: where the screw goes in
+   with hand force — that is `snug` — and where it moves freely but without play — that is
+   `slip`;
+4. write the `0.05 * N` of those holes into `clearances` for that material in
+   `forge/spec.py`. `press` is usually 0.05–0.10 below `snug`, and `free` 0.15 above
+   `slip`.
+
+Print the comb with the same profile you print parts with: a different layer height or
+speed means different numbers.
+
+**The same test ships with the slicer.** In OrcaSlicer it is a built-in model:
+Prepare → right-click the plate → Add Handy Model → Tolerance Test, a hexagon and holes
+with 0.0–0.4 mm clearances —
+[described in the wiki](https://www.orcaslicer.com/wiki/calibration/tolerance_calib).
+It answers the same question; the comb here is handier in that it measures against an
+actual M3 screw and hands you the numbers in the shape they take in `forge/spec.py`.
+
+If you do decide to calibrate properly, the sensible order is flow and pressure advance
+first ([OrcaSlicer's calibration guide](https://www.orcaslicer.com/wiki/guides/calibration_guide)),
+and clearances only after that: over-extrusion changes the size of a hole more than any
+fit does.
+
+</details>
 
 ## How this differs from CAD MCP servers
 
