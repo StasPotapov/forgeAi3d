@@ -27,7 +27,7 @@ what you need → models/part.py → prints/part/part.stl → print
 ## What it is made of
 
 Little of this is my own code: a printer profile and a filament reference (`forge/`),
-four CLI wrappers (`tools/`) and the skill. The heavy lifting is done by the projects
+five CLI wrappers (`tools/`) and the skill. The heavy lifting is done by the projects
 below.
 
 | Tool | What it does here |
@@ -321,6 +321,38 @@ The chosen shell is removed and the resulting rim is capped with a fan from its 
 The outer geometry is never touched — the original outer triangles are kept, so the
 profile and sharp edges survive 1:1.
 
+## tools/compare.py
+
+Measures how far one mesh is from another: a part before and after an edit, a remodel
+against the STL it was rebuilt from, the output of `solidify.py` against its input.
+
+```bash
+uv run tools/compare.py reference.stl candidate.stl              # numbers
+uv run tools/compare.py reference.stl candidate.stl --heatmap    # + picture in extras/
+uv run tools/compare.py reference.stl candidate.stl --tol 0.1 --json
+```
+
+The distance is taken both ways, because the directions answer different questions:
+*reference → candidate* shows surface the candidate has lost, *candidate → reference*
+shows surface it has gained. For each there is the mean, the 95th percentile, the maximum
+with its coordinates and the share of the area within `--tol` (0.05 mm by default); then
+the Hausdorff distance (the worst of the two maxima) and the symmetric Chamfer mean.
+
+```
+reference: dowel_5mm.stl  6.00×6.00×12.25 mm, 181 mm³
+candidate: dowel_rib.stl  6.00×6.00×12.25 mm, 188 mm³ (+3.4%)
+  reference → candidate: mean 0.013, p95 0.079, max 0.200 mm at (-1.99, 2.11, 9.83); 89.8% within 0.05 mm
+  candidate → reference: mean 0.018, p95 0.165, max 0.200 mm at (-2.35, 2.03, 1.16); 86.6% within 0.05 mm
+hausdorff 0.200 mm, chamfer 0.015 mm
+```
+
+`--heatmap` paints the candidate: grey within tolerance, red where material was added,
+blue where it was removed, three shades each (`tol`–4·`tol`, up to 16·`tol`, beyond). The
+sign needs a closed reference; for an open one only the distance is painted.
+
+Nothing is aligned: both meshes are compared in their own coordinates. If the bounding
+boxes barely overlap, the tool warns that it is measuring an offset rather than a shape.
+
 ## The skill for your agent
 
 The skill teaches the agent this loop: verify dimensions as numbers, always look at the
@@ -433,7 +465,8 @@ forgeAi3d when a part has to be stored, reproduced and refined after each print.
 ```
 models/    part sources (.py, build123d)
 forge/     printer profile, filament reference, export, cache of looked-up dimensions
-tools/     preview.py — render, check.py — printability, measure.py — dimensions, solidify.py — fill cavities
+tools/     preview.py — render, check.py — printability, measure.py — dimensions, solidify.py — fill cavities,
+           compare.py — distance between two meshes
 skill/     the agent skill: en/ and ru/, same contents
 docs/      images for this file
 prints/    one folder per part: the STL in plain view, the rest in extras/ (gitignored)

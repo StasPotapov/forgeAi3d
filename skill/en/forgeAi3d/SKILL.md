@@ -170,6 +170,19 @@ uv run tools/solidify.py incoming.stl --fill 1     # -> prints/incoming_solid/
 
 **Never overwrite the file that was sent in.** The result is a new file in `prints/`.
 
+**Checking against the original — `tools/compare.py`.** After remodelling someone else's
+STL, after `solidify.py`, and after an edit that was not supposed to touch the rest,
+compare the new against the old by numbers rather than by eye:
+
+```bash
+uv run tools/compare.py incoming.stl prints/part/part.stl --heatmap
+```
+
+Read both directions: `reference → candidate` is what got lost, `candidate → reference`
+is what appeared. After `solidify.py` the first shows the removed inner shell, which is
+expected, while the second should be almost entirely `within` — apart from the capped rim.
+The models share coordinates: put a remodelled part where the original sits first.
+
 ## When the part cannot be printed
 
 `check.py` computes the geometry with augura off the STEP — exactly, from faces rather
