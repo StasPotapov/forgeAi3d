@@ -1,7 +1,7 @@
 ---
 name: forgeAi3d
-description: Designing parts for 3D printing. Builds a model from a description or edits one that was sent in, and hands back a ready STL with previews and a printability report. Works as a loop — the user prints, says what is wrong, and the model is fixed by one constant.
-when_to_use: When asked to model a part for printing ("make a stand/holder/lid/adapter", "I'd like to print one"), when an STL/STEP is sent in to be edited, when asked to change a dimension or a clearance in a part that already exists, or when the result of a test print is reported ("the hole is too small", "it does not fit").
+description: "Models parts for 3D printing: builds one from a description or edits a model that was sent in, hands back an STL with previews and a printability check, refines it after a test print."
+when_to_use: "\"make a stand/holder/lid\", \"I'd like to print one\", an STL/STEP sent in to be edited, a request to change a size or clearance, a test print result (\"the hole is too small\", \"it does not fit\")."
 argument-hint: <what to model, or a path to a model file>
 allowed-tools: Bash, Read, Write, Edit, WebSearch, WebFetch, AskUserQuestion, Skill
 ---
@@ -45,6 +45,9 @@ understand the task → models/part.py → measure (numbers) → preview (eyes) 
                             ↑                                                        ↓
                             └─────────── edit one constant ←── "the hole is small" ───┘
 ```
+
+A code review (the `review` skill) is not needed for a model: `measure`, `preview` and
+`check` verify its quality.
 
 ```bash
 cd "${FORGEAI3D_HOME:-$HOME/dev/forgeAi3d}"
