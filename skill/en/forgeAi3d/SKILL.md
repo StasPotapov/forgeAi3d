@@ -14,7 +14,10 @@ is text, so it can be seen whole, edited surgically, and kept in history.
 
 **Everything lives in the repository root** — `$FORGEAI3D_HOME`, `~/dev/forgeAi3d` by
 default. Sources in `models/`, exports in `prints/`, the printer and filament reference
-in `forge/`, the tools in `tools/`. Details are in `README.md` in the root.
+in `forge/`, the tools in `tools/`. Details are in `README.md` in the root. No workspace
+there (no `pyproject.toml`), `uv` or OpenSCAD missing, or the person asks to set up or update —
+that is the `setup` skill (`/forgeAi3d:setup` as a plugin, `skills/setup/SKILL.md` of the repository
+otherwise).
 
 **Every part gets its own folder in `prints/`.** Only the STL is in plain sight — that is
 what goes into the slicer; STEP, 3MF, previews and sections are tucked into `extras/` so

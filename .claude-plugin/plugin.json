@@ -1,0 +1,11 @@
+{
+  "name": "forgeAi3d",
+  "version": "0.1.0",
+  "description": "Code CAD for 3D printing: the agent models a part in build123d from a description or edits an STL/STEP you send, hands back an STL with previews and a printability check, and refines it after a test print. The setup skill installs uv, OpenSCAD and the workspace with the tools and your printer.",
+  "author": { "name": "Stas Potapov" },
+  "homepage": "https://github.com/StasPotapov/forgeAi3d",
+  "repository": "https://github.com/StasPotapov/forgeAi3d",
+  "license": "MIT",
+  "keywords": ["3d-printing", "cad", "build123d", "stl", "openscad"],
+  "skills": ["./skill/en/forgeAi3d/", "./skills/setup/"]
+}

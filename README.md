@@ -361,8 +361,21 @@ of inventing them, look up hardware dimensions in a datasheet instead of making 
 and edit a constant rather than rebuild the model. Inside are a build123d and bd_warehouse
 cheat sheet (every example executed, not written from memory) and design rules for FDM.
 
-It comes in two versions with the same contents: `skill/en/forgeAi3d` (English) and
-`skill/ru/forgeAi3d` (Russian). Install one — whichever language you would rather read:
+**As a Claude Code plugin** — the English skill and a setup skill in one install:
+
+```
+/plugin marketplace add StasPotapov/sp-tools
+/plugin install forgeAi3d@sp-tools
+```
+
+Then say "set up forgeAi3d" (or run `/forgeAi3d:setup`). It checks uv and OpenSCAD and installs them
+after you agree, clones the workspace to `~/dev/forgeAi3d` (or `FORGEAI3D_HOME`), runs `uv sync`,
+asks about your printer and filaments for `forge/spec.py`, and runs a test part through all four tools.
+Your models, prints and clearances stay in the workspace when the plugin updates. The skill is then
+`/forgeAi3d:forgeAi3d`.
+
+**From a clone.** The skill comes in two versions with the same contents: `skill/en/forgeAi3d`
+(English) and `skill/ru/forgeAi3d` (Russian). Install one — whichever language you would rather read:
 
 ```bash
 ln -s ~/dev/forgeAi3d/skill/en/forgeAi3d ~/.claude/skills/forgeAi3d
