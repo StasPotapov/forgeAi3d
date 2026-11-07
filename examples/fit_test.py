@@ -9,6 +9,10 @@ material.
 Hole N has a clearance of STEP*N per side, that is a diameter of SCREW + 2*STEP*N. The
 range covers all four fits of both filaments: from press (0.00) to free (0.45).
 """
+import os
+from pathlib import Path
+os.environ.setdefault("FORGEAI3D_HOME", str(Path(__file__).resolve().parent))
+
 from build123d import *
 
 from forge import export_all
@@ -66,7 +70,7 @@ with BuildPart() as part:
     chamfer(part.faces().sort_by(Axis.Z)[0].edges(), length=0.5)
 
 stem = f"fit_test_{MAT.lower().replace('-', '_')}"
-paths = export_all(part.part, stem, material=MAT)
+paths = export_all(part.part, stem, material=MAT, out=Path(__file__).resolve().parent)
 
 bb = part.part.bounding_box()
 print(f"material   {MAT}")

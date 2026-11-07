@@ -8,56 +8,64 @@ allowed-tools: Bash, Read, Write, Edit, WebSearch, WebFetch, AskUserQuestion, Sk
 
 # forgeAi3d — modelling for 3D printing
 
-Code CAD: a part is a Python file built with build123d, and out of it come an STL to
-print, a STEP for further edits and exact analysis, and a 3MF for Bambu Studio. The model
-is text, so it can be seen whole, edited surgically, and kept in history.
+Resolve the complete runtime three levels above this skill; its `forge/`, `tools/` and dependencies are separate from personal models. Read `forge/spec.py` for printer defaults; use `skills/setup/SKILL.md` for setup.
 
-**Everything lives in the repository root** — `$FORGEAI3D_HOME`, `~/dev/forgeAi3d` by
-default. Sources in `models/`, exports in `prints/`, the printer and filament reference
-in `forge/`, the tools in `tools/`. Details are in `README.md` in the root. No workspace
-there (no `pyproject.toml`), `uv` or OpenSCAD missing, or the person asks to set up or update —
-that is the `setup` skill (`/forgeAi3d:setup` as a plugin, `skills/setup/SKILL.md` of the repository
-otherwise).
+## Private model folders
 
-**Every part gets its own folder in `prints/`.** Only the STL is in plain sight — that is
-what goes into the slicer; STEP, 3MF, previews and sections are tucked into `extras/` so
-they do not get in the way:
+Personal models are local working data, not tool source. Before creating any model,
+ensure `/models/` is Git-ignored in its containing workspace. Never git-add, commit,
+push or package personal model code, references, slicer profiles or generated files.
+General commit rules apply to development of this tool, not to these private models.
+The tool's public templates live in `examples/`; never put user work there or in `docs/`.
+
+Each model is one self-contained directory:
 
 ```
-prints/stand/
-    stand.stl                     ← this is what the user gets
-    extras/stand.step             ← edits and exact analysis
-    extras/stand.3mf              ← Bambu Studio
-    extras/stand.png              ← preview
-    extras/stand-overhangs.png    ← overhangs
-    extras/stand-section-y.png    ← section
+models/part/
+    model.py                 # editable source; assets use paths relative to this file
+    README.md                # dimensions, rebuild command, settings and known limits
+    design.png               # one selected reference, when supplied
+    part.stl                 # printing geometry
+    part.3mf                 # configured slicer project, when prepared
+    assets/                  # SVGs, source meshes, print profiles and other inputs
+    extras/                  # STEP, geometric 3MF, previews, reports and old revisions
 ```
 
-The layout is made by `export_all`; the tools take the path to the STL and find the rest
-themselves. There is no need to assemble paths into `extras/` by hand.
+Start work from the selected model folder; read its README and source and inspect its
+reference. Keep all model-specific data there. Use `export_all(..., out=Path(__file__).resolve().parent)`
+so a relocated model rebuilds in its own folder. `out` is a model directory: STEP and
+geometric 3MF go to its `extras/`; a configured root 3MF is not overwritten by CAD export.
+`FORGEAI3D_HOME` can name the model folder or the parent workspace; `FORGEAI3D_MODEL_DIR`
+explicitly selects a model folder. Without either, the working directory is used;
+when it contains `model.py`, exports stay there. From a parent workspace they default
+to `models/<stem>/`. Runtime and virtual environment remain separate from personal data.
+Do not use runtime package directories as a workspace. Keep model-local hardware
+measurements in `extras/specs_cache.json`; copy required profiles into the folder.
 
-**The printer and the filaments on the shelf are described in `forge/spec.py` — read them
-from there, not from memory.** Right now it holds a Bambu Lab A1 mini (bed 180×180×180,
-0.4 nozzle, no enclosure, no hardened nozzle) and PLA + PETG. When the hardware or the
-spools change, they are edited in that one file and the models and checks pick it up.
+For migration, back up first, move all inputs and outputs together, resolve relative
+paths, verify file hashes and a rebuild, then remove superseded loose locations.
+Do not fabricate missing CAD source for a supplied STL: label it as mesh-only.
+Do not overwrite a configured project with a geometry-only 3MF. Re-slice explicitly
+when geometry changes, verify one instance unless requested otherwise, and keep the
+user's printer, material, plate and process settings.
 
 ## The loop
 
 ```
-understand the task → models/part.py → measure (numbers) → preview (eyes) → check → hand over
+understand the task → models/part/model.py → measure (numbers) → preview (eyes) → check → hand over
                             ↑                                                        ↓
                             └─────────── edit one constant ←── "the hole is small" ───┘
 ```
 
-A code review (the `review` skill) is not needed for a model: `measure`, `preview` and
-`check` verify its quality.
+Use `measure`, `preview` and `check` for geometry. Follow user-required code review
+as well; review does not authorize committing a private model.
 
 ```bash
 cd "${FORGEAI3D_HOME:-$HOME/dev/forgeAi3d}"
-uv run python models/part.py                          # -> prints/part/part.stl + extras/
-uv run tools/measure.py prints/part/part.stl          # dimensions and holes as numbers
-uv run tools/preview.py prints/part/part.stl          # -> extras/part.png
-uv run tools/check.py prints/part/part.stl --material PETG   # exit 1 = do not print
+uv run python model.py                          # -> part.stl + extras/
+uv run tools/measure.py part.stl          # dimensions and holes as numbers
+uv run tools/preview.py part.stl          # -> extras/part.png
+uv run tools/check.py part.stl --material PETG   # exit 1 = do not print
 ```
 
 ## Rules that are not optional
@@ -97,7 +105,7 @@ from forge import export_all
 paths = export_all(part.part, "part", material=MAT)
 ```
 
-**The names line up:** `models/stand.py` → `prints/stand/stand.stl`. `check.py` and
+**The names line up:** `models/stand/model.py` → `models/stand/stand.stl`. `check.py` and
 `measure.py` pick the STEP out of `extras/` themselves and analyse it exactly.
 
 ## Dimensions of someone else's hardware are never invented
@@ -171,17 +179,17 @@ void, and a size like 3.9×3.9×5.2 mm gives away a screw hole.
 
 ```bash
 uv run tools/solidify.py incoming.stl               # list the voids
-uv run tools/solidify.py incoming.stl --fill 1     # -> prints/incoming_solid/
+uv run tools/solidify.py incoming.stl --fill 1     # -> models/incoming_solid/
 ```
 
-**Never overwrite the file that was sent in.** The result is a new file in `prints/`.
+**Never overwrite the file that was sent in.** The result is a new file in `models/`.
 
 **Checking against the original — `tools/compare.py`.** After remodelling someone else's
 STL, after `solidify.py`, and after an edit that was not supposed to touch the rest,
 compare the new against the old by numbers rather than by eye:
 
 ```bash
-uv run tools/compare.py incoming.stl prints/part/part.stl --heatmap
+uv run tools/compare.py incoming.stl part.stl --heatmap
 ```
 
 Read both directions: `reference → candidate` is what got lost, `candidate → reference`
@@ -203,7 +211,7 @@ than from triangles. What it says and what to do about it:
 | lay it differently | the suggested rotation is augura's recommendation — decide it together with the user |
 | step thinner than a layer | a small feature will disappear: make it bigger or print with a thinner layer |
 
-To see **where** the overhangs are: `uv run tools/preview.py prints/part/part.stl
+To see **where** the overhangs are: `uv run tools/preview.py part.stl
 --overhangs --material PETG` — they come out red. To see inside: `--section y` (cut
 through the middle, or `y:12.5`). The images land in `extras/` next to the part.
 
@@ -223,15 +231,14 @@ The user prints and says what is wrong. This is the most common work of all.
 | "the supports will not come off" | change the orientation or rework the overhang to 45° |
 
 Change **the constant**, rebuild, show the preview, and say exactly what changed. If the
-fix exposes a systematic error in the clearances, offer to calibrate: `uv run python
-models/fit_test.py`, print the comb, and write the real numbers into `clearances` for that
-material in `forge/spec.py`. Do not create a new file for this — `models/fit_test.py`
-already exists.
+fix exposes a systematic error in the clearances, offer to calibrate: `uv run python models/fit_test_pla/model.py`, print the comb, and write the real numbers into `clearances` for that
+material in `forge/spec.py`. First copy `examples/fit_test.py` to that private `model.py` if it is absent;
+never overwrite an existing model or edit the public template.
 
 ## What to hand back to the user
 
 1. **the path to the STL — always, on the first line.** A full path like
-   `prints/stand/stand.stl`, not "the file is in prints" and not the folder: this is the
+   `models/stand/stand.stl`, not "the file is in prints" and not the folder: this is the
    file the human is about to drag into the slicer. Paths to the STEP, the 3MF and the
    previews only if asked, or if they are needed for the job;
 2. the preview (show that you looked at it yourself);

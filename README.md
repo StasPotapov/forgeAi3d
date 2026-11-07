@@ -17,12 +17,50 @@ STL, a preview and a printability report. You print it, say what is wrong, and o
 constant changes.
 
 ```
-what you need → models/part.py → prints/part/part.stl → print
+what you need → models/part/model.py → models/part/part.stl → print
                       ↑                                 │
                       └── "the hole is half a mm small" ┘
 ```
 
-![contact sheet of the clearance comb](docs/fit_test.png)
+## Private model folders
+
+Personal models are local working data, not tool source. Before creating any model,
+ensure `/models/` is Git-ignored in its containing workspace. Never git-add, commit,
+push or package personal model code, references, slicer profiles or generated files.
+General commit rules apply to development of this tool, not to these private models.
+The tool's public templates live in `examples/`; never put user work there or in `docs/`.
+
+Each model is one self-contained directory:
+
+```
+models/part/
+    model.py                 # editable source; assets use paths relative to this file
+    README.md                # dimensions, rebuild command, settings and known limits
+    design.png               # one selected reference, when supplied
+    part.stl                 # printing geometry
+    part.3mf                 # configured slicer project, when prepared
+    assets/                  # SVGs, source meshes, print profiles and other inputs
+    extras/                  # STEP, geometric 3MF, previews, reports and old revisions
+```
+
+Start work from the selected model folder; read its README and source and inspect its
+reference. Keep all model-specific data there. Use `export_all(..., out=Path(__file__).resolve().parent)`
+so a relocated model rebuilds in its own folder. `out` is a model directory: STEP and
+geometric 3MF go to its `extras/`; a configured root 3MF is not overwritten by CAD export.
+`FORGEAI3D_HOME` can name the model folder or the parent workspace; `FORGEAI3D_MODEL_DIR`
+explicitly selects a model folder. Without either, the working directory is used;
+when it contains `model.py`, exports stay there. From a parent workspace they default
+to `models/<stem>/`. Runtime and virtual environment remain separate from personal data.
+Do not use runtime package directories as a workspace. Keep model-local hardware
+measurements in `extras/specs_cache.json`; copy required profiles into the folder.
+
+For migration, back up first, move all inputs and outputs together, resolve relative
+paths, verify file hashes and a rebuild, then remove superseded loose locations.
+Do not fabricate missing CAD source for a supplied STL: label it as mesh-only.
+Do not overwrite a configured project with a geometry-only 3MF. Re-slice explicitly
+when geometry changes, verify one instance unless requested otherwise, and keep the
+user's printer, material, plate and process settings.
+
 
 ## What it is made of
 
@@ -82,63 +120,20 @@ overridden with `FORGEAI3D_HOME`.
 ## Quick start
 
 ```bash
-uv run python models/fit_test.py                                  # -> prints/fit_test_pla/
-uv run tools/measure.py prints/fit_test_pla/fit_test_pla.stl         # dimensions and holes as numbers
-uv run tools/preview.py prints/fit_test_pla/fit_test_pla.stl         # contact sheet
-uv run tools/check.py prints/fit_test_pla/fit_test_pla.stl --material PLA   # print it or not
+mkdir -p models/fit_test_pla
+cp examples/fit_test.py models/fit_test_pla/model.py
+uv run python models/fit_test_pla/model.py                                  # -> models/fit_test_pla/
+uv run tools/measure.py models/fit_test_pla/fit_test_pla.stl         # dimensions and holes as numbers
+uv run tools/preview.py models/fit_test_pla/fit_test_pla.stl         # contact sheet
+uv run tools/check.py models/fit_test_pla/fit_test_pla.stl --material PLA   # print it or not
 ```
 
 The path to the STL is enough for every tool: they find the STEP for exact analysis
 themselves.
 
-`models/fit_test.py` is a clearance comb: ten M3 holes with per-side clearances from 0.00
+`examples/fit_test.py` is a clearance comb: ten M3 holes with per-side clearances from 0.00
 to 0.45 mm. Printing it is optional — it is there for when the typical clearances do not
 work out (see "Clearance calibration" below).
-
-## Two real examples
-
-### A wall plug, built from a description
-
-The task arrived as a sentence: a furniture plug for a 5 mm hole and a 3.5×15 screw.
-I supplied three numbers; the agent decided the rest and said so out loud — PETG, because
-it is ductile and survives being wedged apart; a `press` fit, because a plug is hammered
-in; ring barbs instead of the classic split legs, since at a wall of about a millimetre
-printed legs snap along the layers; a 6 mm collar so it hides under the screw's 7 mm head.
-
-![the plug in section](docs/dowel.png)
-
-Then came the loop this is all for. The first version spun in the hole: ring barbs hold
-against pull-out, but an axisymmetric body has nothing to bite with against torque, so the
-screw dragged the plug along instead of threading into it. One sentence — "it spins" — and
-the model was reworked: a through slit along the body (the halves spread apart and wedge
-the plug into the hole), four longitudinal ribs against rotation, and a pilot hole 0.3 mm
-wider, so the screw cuts a thread rather than tearing the part loose.
-
-The model is `models/dowel_5mm.py`, and everything in it turns on constants: `BARB_OVER`
-for how far the barbs stand out, `RIB_COUNT` and `RIB_OVER` for the ribs, `PILOT_TOP` and
-`PILOT_BOT` for the inner cone that makes the screw bite harder as it goes, `SLOT_W` and
-`SLOT_ANG` for the slit. Printed standing up on an A1 mini.
-
-### A toy katana blade — someone else's model, filled
-
-The second case was not modelling but repairing an incoming STL. The twisted blade of a
-toy katana turned out to be a hollow tube with a wall of about 1.2 mm: the slicer honestly sees
-the cavity and prints it as a void, leaving the part brittle. It had to become solid
-without touching the outer shape.
-
-```
-$ uv run tools/solidify.py katana.stl
-katana.stl: 5161 mm³, internal voids found: 1
-  [1]  1496 triangles, area   4013.6 mm², size 11.2×9.7×168.8 mm, open edges 42
-
-$ uv run tools/solidify.py katana.stl --fill 1
-internal triangles removed: 1496 of 3726
-volume: was 5161 mm³ → now 11335 mm³
-```
-
-The outer triangles are taken from the original untouched, so the twisted profile and the
-sharp edges are exactly as they were. The volume doubled — what happens inside is now the
-slicer's business.
 
 ## Describing your printer
 
@@ -198,27 +193,17 @@ save_spec("raspberry pi 5", {"length": 85.0, "width": 56.0},
 
 ## What comes out
 
-Every part gets its own folder. Only the STL — the file you take to the slicer — sits in
-plain view; everything else moves into `extras/`, so the one file you need is never
-buried among the working ones:
-
-```
-prints/stand/
-    stand.stl                     ← this is what gets printed
-    extras/stand.step             ← CAD edits and exact analysis
-    extras/stand.3mf              ← Bambu Studio: millimetres, name, material
-    extras/stand.png              ← preview
-    extras/stand-overhangs.png    ← overhangs in red
-    extras/stand-section-y.png    ← section
-```
+Everything for a model stays in the private folder described above. `export_all`
+writes the STL beside `model.py`, with STEP and geometric 3MF in `extras/`.
+A configured slicer 3MF and selected reference stay beside the STL.
 
 ## tools/measure.py
 
 Answers "is this what was asked for" with numbers rather than a picture.
 
 ```bash
-uv run tools/measure.py prints/part/part.stl
-uv run tools/measure.py prints/part/part.stl --json
+uv run tools/measure.py models/part/part.stl
+uv run tools/measure.py models/part/part.stl --json
 ```
 
 Prints the bounding box, volume, solid count and an inventory of round features: holes
@@ -233,10 +218,10 @@ Renders an STL to PNG with headless OpenSCAD and tiles the views into one contac
 so the agent can look at the result before handing over the file.
 
 ```bash
-uv run tools/preview.py prints/part/part.stl                        # iso, top, front, right
-uv run tools/preview.py prints/part/part.stl --overhangs --material PETG
-uv run tools/preview.py prints/part/part.stl --section y            # or y:12.5
-uv run tools/preview.py prints/part/part.stl -o /tmp/p.png --size 800
+uv run tools/preview.py models/part/part.stl                        # iso, top, front, right
+uv run tools/preview.py models/part/part.stl --overhangs --material PETG
+uv run tools/preview.py models/part/part.stl --section y            # or y:12.5
+uv run tools/preview.py models/part/part.stl -o /tmp/p.png --size 800
 ```
 
 Without `-o` the image lands in that part's `extras/`, its name tagged with the mode.
@@ -247,24 +232,20 @@ Views: `iso`, `iso2`, `iso3`, `iso4` (isometric from four sides), `top`, `front`
 `right`, `back`, `iso_low`, `bottom`.
 
 `--overhangs` paints everything that needs support red, and switches to the lower views
-by itself — overhangs are invisible from above:
-
-![overhang highlighting](docs/overhangs.png)
+by itself — overhangs are invisible from above.
 
 `--section` cuts the part open. There is no other way to check a wall thickness without
 printing the part. The cut plane is painted orange and the views are taken from the side
-of the removed half — otherwise the frame just shows the intact part:
-
-![the dowel cut across](docs/section.png)
+of the removed half — otherwise the frame just shows the intact part.
 
 ## tools/check.py
 
 Checks a part before printing.
 
 ```bash
-uv run tools/check.py prints/part/part.stl --material PETG
-uv run tools/check.py prints/part/part.stl --nozzle 0.6 --bed 256x256x256
-uv run tools/check.py prints/part/part.stl --no-orientation    # skip the orientation search
+uv run tools/check.py models/part/part.stl --material PETG
+uv run tools/check.py models/part/part.stl --nozzle 0.6 --bed 256x256x256
+uv run tools/check.py models/part/part.stl --no-orientation    # skip the orientation search
 ```
 
 Geometry is analysed by [augura](https://github.com/pzfreo/augura), from the exact faces
@@ -301,7 +282,7 @@ infill inside.
 
 ```bash
 uv run tools/solidify.py incoming.stl               # show what is inside
-uv run tools/solidify.py incoming.stl --fill 1     # -> prints/incoming_solid/
+uv run tools/solidify.py incoming.stl --fill 1     # -> models/incoming_solid/
 ```
 
 First the tool lists the voids it found — triangle count, area, bounding box, and how
@@ -339,8 +320,8 @@ with its coordinates and the share of the area within `--tol` (0.05 mm by defaul
 the Hausdorff distance (the worst of the two maxima) and the symmetric Chamfer mean.
 
 ```
-reference: dowel_5mm.stl  6.00×6.00×12.25 mm, 181 mm³
-candidate: dowel_rib.stl  6.00×6.00×12.25 mm, 188 mm³ (+3.4%)
+reference: part.stl  6.00×6.00×12.25 mm, 181 mm³
+candidate: part_revised.stl  6.00×6.00×12.25 mm, 188 mm³ (+3.4%)
   reference → candidate: mean 0.013, p95 0.079, max 0.200 mm at (-1.99, 2.11, 9.83); 89.8% within 0.05 mm
   candidate → reference: mean 0.018, p95 0.165, max 0.200 mm at (-2.35, 2.03, 1.16); 86.6% within 0.05 mm
 hausdorff 0.200 mm, chamfer 0.015 mm
@@ -421,14 +402,15 @@ already in `forge/spec.py`. The only way to get your own figure is to print and 
 exactly what they say: a press fit holds, and "slides freely" stops rattling. Calibrate
 once, edit one file, and every future part computes its clearances from your numbers.
 
-**How it is done.** The comb in `models/fit_test.py` is a plate with ten holes for an M3
+**How it is done.** The comb in `examples/fit_test.py` is a plate with ten holes for an M3
 screw whose clearance grows in 0.05 mm steps per side: hole N has a clearance of
 `0.05 * N`, and the 0.00–0.45 range covers all four fits.
 
-1. change `MAT` in `models/fit_test.py` to the filament you want (the material is embossed
+1. copy `examples/fit_test.py` into a separate private folder for the selected filament
+   (reuse `models/fit_test_pla/model.py` for PLA), then change `MAT` in that private `model.py` (the material is embossed
    on the part itself and goes into the file name, so combs of different filaments do not
    get mixed up);
-2. run `uv run python models/fit_test.py` and print the result;
+2. run that private `model.py` (for PLA: `uv run python models/fit_test_pla/model.py`) and print the result;
 3. push an M3 screw into each hole in turn and find two numbers: where the screw goes in
    with hand force — that is `snug` — and where it moves freely but without play — that is
    `slip`;
@@ -462,8 +444,8 @@ session and a toolbox inside it.
 
 forgeAi3d is built differently:
 
-- **a part is a file in a repository**, not session state. It shows up in git, and you
-  can come back half a year later and change one constant;
+- **a part is a self-contained private folder**, not session state. It stays local
+  and you can reopen it later to change one constant;
 - **the printer profile is executable code**, not a paragraph in a prompt. `wall(3)`
   knows the line width, `clearance()` knows the plastic, and `supported()` knows that ASA
   will not run here;
@@ -476,13 +458,12 @@ forgeAi3d when a part has to be stored, reproduced and refined after each print.
 ## Layout
 
 ```
-models/    part sources (.py, build123d)
+examples/  public starter templates; copy one into a private model folder
+models/    private per-model folders: source, assets, reference and print files (gitignored)
 forge/     printer profile, filament reference, export, cache of looked-up dimensions
 tools/     preview.py — render, check.py — printability, measure.py — dimensions, solidify.py — fill cavities,
            compare.py — distance between two meshes
 skill/     the agent skill: en/ and ru/, same contents
-docs/      images for this file
-prints/    one folder per part: the STL in plain view, the rest in extras/ (gitignored)
 ```
 
 ## License

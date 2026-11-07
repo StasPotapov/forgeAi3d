@@ -12,39 +12,73 @@ from build123d import Mesher, Unit, export_step, export_stl
 
 
 def root() -> Path:
-    """The repository root.
+    """Writable workspace or opened model folder; never infer the installed package."""
+    path = Path(os.environ.get("FORGEAI3D_HOME", Path.cwd())).expanduser()
+    if not path.is_dir():
+        raise RuntimeError(f"FORGEAI3D_HOME points nowhere: {path}")
+    return _writable_path(path)
 
-    Taken from FORGEAI3D_HOME, otherwise derived from the package itself — so that
-    everything works when the repository does not live in ~/dev/forgeAi3d.
-    """
-    env = os.environ.get("FORGEAI3D_HOME")
-    if env:
-        path = Path(env).expanduser()
-        if not path.is_dir():
-            raise RuntimeError(f"FORGEAI3D_HOME points nowhere: {path}")
-        return path.resolve()
-    return Path(__file__).resolve().parent.parent
+
+def _writable_path(path: Path) -> Path:
+    path = path.resolve()
+    if any((parent / "package.lock.json").is_file() for parent in (path, *path.parents)):
+        raise RuntimeError("Model data cannot be written inside an installed runtime package")
+    return path
+
+
+def _private_folder(path: Path) -> Path:
+    path = _writable_path(path)
+    if (path / ".git").exists():
+        raise RuntimeError("Choose a private model subfolder, not a Git repository root")
+    path.mkdir(parents=True, exist_ok=True)
+    ignore = path / ".gitignore"
+    text = ignore.read_text(encoding="utf-8") if ignore.exists() else ""
+    marker = "# forgeAi3d private model data\n*\n"
+    if not text.endswith(marker):
+        ignore.write_text(text.rstrip() + "\n" + marker, encoding="utf-8")
+    return path
+
+
+def _stem(stem: str) -> str:
+    if not isinstance(stem, str) or not stem or stem in (".", "..") or "/" in stem or "\\" in stem:
+        raise ValueError("model name must be a single non-empty filename stem")
+    return stem
+
+
+def _bundle_context() -> Path | None:
+    explicit = os.environ.get("FORGEAI3D_MODEL_DIR")
+    if explicit:
+        return _writable_path(Path(explicit).expanduser())
+    workspace = root()
+    return workspace if (workspace / "model.py").is_file() else None
+
+
+def models_dir() -> Path:
+    """Private model collection, or the parent of the explicitly opened model."""
+    bundle = _bundle_context()
+    path = bundle.parent if bundle is not None else root() / "models"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def prints_dir() -> Path:
-    """The directory of finished parts, created on first use."""
-    path = root() / "prints"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    """Compatibility alias: new outputs belong to private models/, not prints/."""
+    return models_dir()
 
 
 EXTRAS = "extras"
 
 
 def model_dir(stem: str) -> Path:
-    """The folder of one part: prints/<part>/. Only the STL is in plain sight inside."""
-    path = prints_dir() / stem
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    """One self-contained private folder, selected explicitly or models/<stem>."""
+    _stem(stem)
+    path = _bundle_context()
+    if path is None:
+        path = models_dir() / stem
+    return _private_folder(path)
 
 
 def extras_dir(stem: str) -> Path:
-    """Everything that does not go into the slicer: STEP, 3MF, previews, sections."""
     path = model_dir(stem) / EXTRAS
     path.mkdir(parents=True, exist_ok=True)
     return path
@@ -81,6 +115,9 @@ def export_all(part: Any, stem: str, material: str | None = None,
                out: Path | None = None) -> dict[str, Path]:
     """Write the part in all three formats and return the paths.
 
+    `out` selects the model folder, with auxiliary files always in extras/.
+    A configured root 3MF is intentionally preserved.
+
     STL goes to the printer, STEP is for further edits and the exact analysis in
     check.py, and 3MF is Bambu Studio's native format: it carries the units and the
     metadata that an STL has no room for.
@@ -88,10 +125,10 @@ def export_all(part: Any, stem: str, material: str | None = None,
     export_stl and export_step return a bool and raise nothing: on failure they
     quietly leave the old file on disk, so the return value is checked.
     """
-    # the directories are created right before the move: if the export fails, no empty
-    # folders are left behind in prints/
-    main = out or (prints_dir() / stem)
-    extras = (main / EXTRAS) if out is None else main
+    # Select a private bundle before writing; keep any configured root 3MF intact.
+    _stem(stem)
+    main = _private_folder(Path(out).expanduser()) if out is not None else model_dir(stem)
+    extras = main / EXTRAS
     # the STL is what goes into the slicer — it stays in plain sight, the rest into extras/
     paths = {
         "stl": main / f"{stem}.stl",
@@ -141,7 +178,10 @@ CACHE = "specs_cache.json"
 
 
 def _cache_path() -> Path:
-    return root() / "forge" / CACHE
+    bundle = _bundle_context()
+    directory = _private_folder(bundle) / EXTRAS if bundle is not None else _private_folder(models_dir() / "_shared")
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory / CACHE
 
 
 def load_specs() -> dict[str, dict]:

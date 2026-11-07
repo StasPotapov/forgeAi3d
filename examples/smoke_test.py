@@ -1,5 +1,9 @@
 """A smoke-test part: a 40x24x6 plate with two M3 holes, rounded corners and a chamfer
 along the top contour."""
+import os
+from pathlib import Path
+os.environ.setdefault("FORGEAI3D_HOME", str(Path(__file__).resolve().parent))
+
 from build123d import *
 
 from forge import clearance, export_all
@@ -23,7 +27,7 @@ with BuildPart() as part:
 
     chamfer(part.faces().sort_by(Axis.Z)[-1].edges(), length=0.8)
 
-paths = export_all(part.part, "smoke_test", material=MAT)
+paths = export_all(part.part, "smoke_test", material=MAT, out=Path(__file__).resolve().parent)
 
 print(f"material   {MAT}")
 print(f"hole       {hole_d:.2f} mm for an M{M3:.0f} screw")

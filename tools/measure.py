@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Numeric measurement of a part off its STEP.
 
-    uv run tools/measure.py prints/part/part.stl [--json]
+    uv run tools/measure.py models/part/part.stl [--json]
 
 A preview shows that the part looks like what was intended; measuring answers whether
 the dimensions match. A render looks right even when the geometry is wrong, so the

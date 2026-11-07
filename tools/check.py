@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Printability check of a part.
 
-    uv run tools/check.py prints/part/part.stl [--material petg] [--nozzle 0.4] [--bed 180x180x180]
-    uv run tools/check.py prints/part/part.step --material petg
+    uv run tools/check.py models/part/part.stl [--material petg] [--nozzle 0.4] [--bed 180x180x180]
+    uv run tools/check.py models/part/part.step --material petg
 
 The geometry is computed by augura: off a STEP it is exact, from B-Rep faces; off an STL
 it is approximate — there is neither wall thickness nor small vertical features there. So

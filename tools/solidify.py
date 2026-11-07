@@ -182,7 +182,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("src", type=Path, help="the source mesh (STL, OBJ, 3MF...)")
     ap.add_argument("-o", "--out", type=Path,
-                    help="where to write it (prints/<name>_solid/<name>_solid.stl by default)")
+                    help="where to write it (models/<name>_solid/<name>_solid.stl by default)")
     ap.add_argument("--fill", metavar="N[,M] | all",
                     help="numbers of the voids from the list above; without this flag no "
                          "file is written")

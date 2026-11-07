@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Rendering a model into a PNG contact sheet through headless OpenSCAD.
 
-    uv run tools/preview.py prints/part/part.stl [-o file.png] [--views iso,top,front,right]
-    uv run tools/preview.py prints/part/part.stl --overhangs --material PETG
-    uv run tools/preview.py prints/part/part.stl --section y
+    uv run tools/preview.py models/part/part.stl [-o file.png] [--views iso,top,front,right]
+    uv run tools/preview.py models/part/part.stl --overhangs --material PETG
+    uv run tools/preview.py models/part/part.stl --section y
 
 --overhangs paints the faces that need supports red: the report from check.py says how
 much of them there is by area, and the preview shows where exactly.
