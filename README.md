@@ -22,46 +22,6 @@ what you need → models/part/model.py → models/part/part.stl → print
                       └── "the hole is half a mm small" ┘
 ```
 
-## Private model folders
-
-Personal models are local working data, not tool source. Before creating any model,
-ensure `/models/` is Git-ignored in its containing workspace. Never git-add, commit,
-push or package personal model code, references, slicer profiles or generated files.
-General commit rules apply to development of this tool, not to these private models.
-The tool's public templates live in `examples/`; never put user work there or in `docs/`.
-
-Each model is one self-contained directory:
-
-```
-models/part/
-    model.py                 # editable source; assets use paths relative to this file
-    README.md                # dimensions, rebuild command, settings and known limits
-    design.png               # one selected reference, when supplied
-    part.stl                 # printing geometry
-    part.3mf                 # configured slicer project, when prepared
-    assets/                  # SVGs, source meshes, print profiles and other inputs
-    extras/                  # STEP, geometric 3MF, previews, reports and old revisions
-```
-
-Start work from the selected model folder; read its README and source and inspect its
-reference. Keep all model-specific data there. Use `export_all(..., out=Path(__file__).resolve().parent)`
-so a relocated model rebuilds in its own folder. `out` is a model directory: STEP and
-geometric 3MF go to its `extras/`; a configured root 3MF is not overwritten by CAD export.
-`FORGEAI3D_HOME` can name the model folder or the parent workspace; `FORGEAI3D_MODEL_DIR`
-explicitly selects a model folder. Without either, the working directory is used;
-when it contains `model.py`, exports stay there. From a parent workspace they default
-to `models/<stem>/`. Runtime and virtual environment remain separate from personal data.
-Do not use runtime package directories as a workspace. Keep model-local hardware
-measurements in `extras/specs_cache.json`; copy required profiles into the folder.
-
-For migration, back up first, move all inputs and outputs together, resolve relative
-paths, verify file hashes and a rebuild, then remove superseded loose locations.
-Do not fabricate missing CAD source for a supplied STL: label it as mesh-only.
-Do not overwrite a configured project with a geometry-only 3MF. Re-slice explicitly
-when geometry changes, verify one instance unless requested otherwise, and keep the
-user's printer, material, plate and process settings.
-
-
 ## What it is made of
 
 Little of this is my own code: a printer profile and a filament reference (`forge/`),
@@ -197,7 +157,7 @@ save_spec("raspberry pi 5", {"length": 85.0, "width": 56.0},
 
 ## What comes out
 
-Everything for a model stays in the private folder described above. `export_all`
+Everything for a model stays in the private folder described in [Private model folders](#private-model-folders). `export_all`
 writes the STL beside `model.py`, with STEP and geometric 3MF in `extras/`.
 A configured slicer 3MF and selected reference stay beside the STL.
 
@@ -470,6 +430,46 @@ tools/     preview.py — render, check.py — printability, measure.py — dime
            compare.py — distance between two meshes
 skill/     the agent skill: en/ and ru/, same contents
 ```
+
+## Private model folders
+
+Personal models are local working data, not tool source. Before creating any model,
+ensure `/models/` is Git-ignored in its containing workspace. Never git-add, commit,
+push or package personal model code, references, slicer profiles or generated files.
+General commit rules apply to development of this tool, not to these private models.
+The tool's public templates live in `examples/`; never put user work there or in `docs/`.
+
+Each model is one self-contained directory:
+
+```
+models/part/
+    model.py                 # editable source; assets use paths relative to this file
+    README.md                # dimensions, rebuild command, settings and known limits
+    design.png               # one selected reference, when supplied
+    part.stl                 # printing geometry
+    part.3mf                 # configured slicer project, when prepared
+    assets/                  # SVGs, source meshes, print profiles and other inputs
+    extras/                  # STEP, geometric 3MF, previews, reports and old revisions
+```
+
+Start work from the selected model folder; read its README and source and inspect its
+reference. Keep all model-specific data there. Use `export_all(..., out=Path(__file__).resolve().parent)`
+so a relocated model rebuilds in its own folder. `out` is a model directory: STEP and
+geometric 3MF go to its `extras/`; a configured root 3MF is not overwritten by CAD export.
+`FORGEAI3D_HOME` can name the model folder or the parent workspace; `FORGEAI3D_MODEL_DIR`
+explicitly selects a model folder. Without either, the working directory is used;
+when it contains `model.py`, exports stay there. From a parent workspace they default
+to `models/<stem>/`. Runtime and virtual environment remain separate from personal data.
+Do not use runtime package directories as a workspace. Keep model-local hardware
+measurements in `extras/specs_cache.json`; copy required profiles into the folder.
+
+For migration, back up first, move all inputs and outputs together, resolve relative
+paths, verify file hashes and a rebuild, then remove superseded loose locations.
+Do not fabricate missing CAD source for a supplied STL: label it as mesh-only.
+Do not overwrite a configured project with a geometry-only 3MF. Re-slice explicitly
+when geometry changes, verify one instance unless requested otherwise, and keep the
+user's printer, material, plate and process settings.
+
 
 ## License
 
