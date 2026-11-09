@@ -137,8 +137,8 @@ work out (see "Clearance calibration" below).
 
 ## Describing your printer
 
-All hardware and all filaments live in one file — **`forge/spec.py`**. Out of the box it
-holds a Bambu Lab A1 mini with PLA and PETG.
+Shipped defaults live in **`forge/spec.py`**: Bambu Lab A1 mini with PLA and PETG.
+The following code illustrates these defaults; do not edit an installed runtime.
 
 ```python
 A1_MINI = Printer(
@@ -156,8 +156,12 @@ A1_MINI = Printer(
 AVAILABLE = ("PLA", "PETG")   # what is actually on the shelf
 ```
 
-Describe your printer and keep `AVAILABLE` honest — the checks will then reject
-incompatible materials on their own.
+Set your printer in `[printer]` and stocked materials in `available` in the private
+`forge-profile.toml`; see [setup](skills/setup/SKILL.md). Only changed values are needed.
+An explicit `FORGEAI3D_PROFILE` wins. Otherwise the file is read under
+`FORGEAI3D_HOME`, or `FORGEAI3D_MODEL_DIR` when HOME is unset, or the current directory.
+Keep the workspace HOME unchanged while switching model folders; a missing implicit
+profile uses the shipped defaults.
 
 ## How models use it
 
@@ -350,8 +354,9 @@ cheat sheet (every example executed, not written from memory) and design rules f
 ```
 
 Then say "set up forgeAi3d" (or run `/forgeAi3d:setup`). It checks uv and OpenSCAD and installs them
-after you agree, clones the workspace to `~/dev/forgeAi3d` (or `FORGEAI3D_HOME`), runs `uv sync`,
-asks about your printer and filaments for `forge/spec.py`, and runs a test part through all four tools.
+after you agree, reuses the installed runtime, prepares a separate `FORGEAI3D_HOME` model project
+and an external uv environment, writes printer/filament overrides to `forge-profile.toml`,
+and runs a test part through all four tools.
 Your models, prints and clearances stay in the workspace when the plugin updates. The skill is then
 `/forgeAi3d:forgeAi3d`.
 
@@ -414,8 +419,8 @@ screw whose clearance grows in 0.05 mm steps per side: hole N has a clearance of
 3. push an M3 screw into each hole in turn and find two numbers: where the screw goes in
    with hand force — that is `snug` — and where it moves freely but without play — that is
    `slip`;
-4. write the `0.05 * N` of those holes into `clearances` for that material in
-   `forge/spec.py`. `press` is usually 0.05–0.10 below `snug`, and `free` 0.15 above
+4. write the `0.05 * N` of those holes into `[materials.PLA.clearances]` (or the
+   relevant material) in the model project's `forge-profile.toml`. `press` is usually 0.05–0.10 below `snug`, and `free` 0.15 above
    `slip`.
 
 Print the comb with the same profile you print parts with: a different layer height or
@@ -469,3 +474,11 @@ skill/     the agent skill: en/ and ru/, same contents
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Portable runtime packages
+
+When installed through AI Workspace, keep the pinned runtime separate from model
+projects. Set `FORGEAI3D_HOME` to the model project and use its `forge-profile.toml`
+(or `FORGEAI3D_PROFILE`) for printer and material overrides. Keep the uv environment
+outside the package via `UV_PROJECT_ENVIRONMENT`. Follow `skills/setup/SKILL.md`;
+update packages through the workspace instead of editing or git-pulling a snapshot.

@@ -2,9 +2,11 @@
 name: forgeAi3d
 description: "Моделирует детали под 3D-печать: делает по описанию или правит присланную модель, отдаёт STL с превью и проверкой печатопригодности, дорабатывает по итогам печати."
 when_to_use: "«сделай подставку/держатель/крышку», «напечатать бы», прислали STL/STEP на правку, просят поменять размер или зазор, сообщают итог печати («отверстие мало», «не налезает»)."
-argument-hint: <что нужно смоделировать или файл модели>
-allowed-tools: Bash, Read, Write, Edit, WebSearch, WebFetch, AskUserQuestion, Skill
 ---
+
+Read `HOST.md` in this skill directory before running tools; it defines portable paths and host capabilities.
+
+
 
 # forgeAi3d — моделирование под 3D-печать
 
@@ -42,7 +44,10 @@ models/деталь/
 `FORGEAI3D_MODEL_DIR` явно выбирает папку модели. Без них используется текущая папка:
 если в ней есть `model.py`, экспорт остаётся в ней; из родительского воркспейса —
 в `models/<имя>/`. Runtime и venv хранятся отдельно от личных данных. В папке
-установленного пакета не работай. Кэш обмеров модели — `extras/specs_cache.json`;
+установленного пакета не работай. Сохраняй `FORGEAI3D_HOME` корнем воркспейса с
+общим профилем; активную модель выбирай через `FORGEAI3D_MODEL_DIR` и `cd`. Для
+отдельной самодостаточной папки обе переменные могут указывать на неё.
+`FORGEAI3D_PROFILE` явно выбирает файл профиля. Кэш обмеров модели — `extras/specs_cache.json`;
 необходимые профили также копируй внутрь папки.
 
 При миграции сначала сохрани резервную копию, перенеси вместе входные файлы и
@@ -64,11 +69,19 @@ models/деталь/
 если его требуют правила пользователя; оно не разрешает коммитить личную модель.
 
 ```bash
-cd "${FORGEAI3D_HOME:-$HOME/dev/forgeAi3d}"
-uv run python model.py                       # -> деталь.stl + extras/
-uv run tools/measure.py деталь.stl        # размеры и отверстия числами
-uv run tools/preview.py деталь.stl        # -> extras/деталь.png
-uv run tools/check.py деталь.stl --material PETG   # exit 1 = печатать нельзя
+# Resolve both paths first; keep the environment outside the immutable package.
+export FORGEAI3D_HOME="<absolute-model-workspace>"
+export FORGEAI3D_MODEL_DIR="<absolute-model-folder>"
+export FORGEAI3D_RUNTIME="<real-package-root>"
+export UV_PROJECT_ENVIRONMENT="${XDG_DATA_HOME:-$HOME/.local/share}/forgeAi3d/venv"
+export PYTHONDONTWRITEBYTECODE=1
+cd "$FORGEAI3D_MODEL_DIR"
+# In commands below, use uv run --frozen --project "$FORGEAI3D_RUNTIME";
+# resolve tools/... and forge/spec.py against FORGEAI3D_RUNTIME.
+uv run --frozen --project "$FORGEAI3D_RUNTIME" python model.py                       # -> деталь.stl + extras/
+uv run --frozen --project "$FORGEAI3D_RUNTIME" python "$FORGEAI3D_RUNTIME/tools/measure.py" деталь.stl        # размеры и отверстия числами
+uv run --frozen --project "$FORGEAI3D_RUNTIME" python "$FORGEAI3D_RUNTIME/tools/preview.py" деталь.stl        # -> extras/деталь.png
+uv run --frozen --project "$FORGEAI3D_RUNTIME" python "$FORGEAI3D_RUNTIME/tools/check.py" деталь.stl --material PETG   # exit 1 = печатать нельзя
 ```
 
 ## Обязательные правила
@@ -180,18 +193,20 @@ save_spec("raspberry pi 5", {"length": 85.0, "width": 56.0, "hole_pitch_x": 58.0
 полость, а «size» вида 3.9×3.9×5.2 мм выдаёт отверстие под винт.
 
 ```bash
-uv run tools/solidify.py присланная.stl                        # список пустот
-uv run tools/solidify.py присланная.stl --fill 1     # -> models/присланная_solid/
+uv run --frozen --project "$FORGEAI3D_RUNTIME" python "$FORGEAI3D_RUNTIME/tools/solidify.py" присланная.stl                        # список пустот
+uv run --frozen --project "$FORGEAI3D_RUNTIME" python "$FORGEAI3D_RUNTIME/tools/solidify.py" присланная.stl --fill 1     # -> присланная_solid.stl в открытой папке модели
 ```
 
-**Никогда не перезаписывай присланный файл.** Результат — новый файл в `models/`.
+**Никогда не перезаписывай присланный файл.** В открытой папке модели результат —
+новый `*_solid.stl` рядом с исходником. Из воркспейса без выбранной модели путь
+по умолчанию — `models/<имя>_solid/<имя>_solid.stl`. Другой путь задаётся через `--out`.
 
 **Сверка с оригиналом — `tools/compare.py`.** После перемоделирования чужого STL, после
 `solidify.py` и после правки, которая не должна была задеть остальное, сравни новое
 со старым числом, а не на глаз:
 
 ```bash
-uv run tools/compare.py присланная.stl деталь.stl --heatmap
+uv run --frozen --project "$FORGEAI3D_RUNTIME" python "$FORGEAI3D_RUNTIME/tools/compare.py" присланная.stl деталь.stl --heatmap
 ```
 
 Читай обе стороны: `reference → candidate` — что потерялось, `candidate → reference` —
@@ -215,7 +230,7 @@ uv run tools/compare.py присланная.stl деталь.stl --heatmap
 | `lay it differently` | предложенный поворот — рекомендация augura, решай вместе с пользователем |
 | `the smallest step … is thinner than the … layer` | мелкая деталь пропадёт: увеличить её или печатать слоем мельче |
 
-Посмотреть, **где** свесы: `uv run tools/preview.py деталь.stl --overhangs
+Посмотреть, **где** свесы: `uv run --frozen --project "$FORGEAI3D_RUNTIME" python "$FORGEAI3D_RUNTIME/tools/preview.py" деталь.stl --overhangs
 --material PETG` — красным. Посмотреть внутрь: `--section y` (разрез посередине, можно
 `y:12.5`). Картинки лягут в `extras/` рядом с деталью.
 
@@ -235,11 +250,15 @@ uv run tools/compare.py присланная.stl деталь.stl --heatmap
 | «поддержки не отодрать» | сменить ориентацию или переделать свес под 45° |
 
 Меняй **константу**, пересобирай, показывай превью, говори что именно поменялось.
-Если правка вскрывает системную ошибку в зазорах — предложи откалибровать:
-`uv run python models/fit_test_pla/model.py`, напечатать гребёнку, вписать реальные числа
-в `clearances` нужного материала в `forge/spec.py`. Сначала скопируй туда
-`examples/fit_test.py`, если личного `model.py` ещё нет. Не перезаписывай свою модель
-и не редактируй публичный шаблон.
+При системной ошибке зазоров предложи калибровку. Выбери отдельную личную папку:
+`<воркспейс>/models/fit_test_pla` для общего воркспейса или соседнюю папку для
+самодостаточной модели. Не вкладывай другую модель внутрь активной модели.
+Скопируй туда runtime `examples/fit_test.py` как `model.py`, если файла ещё нет.
+Запусти `uv run --frozen --project "$FORGEAI3D_RUNTIME" python "<absolute-calibration-folder>/model.py"`.
+На время запуска сохрани текущий `FORGEAI3D_HOME` и выбранный профиль. Если используется
+файл профиля, перед сменой папок закрепи его абсолютный путь в `FORGEAI3D_PROFILE`.
+Напечатай гребёнку и впиши измеренные значения в таблицу `clearances` нужного материала
+в этом же личном `forge-profile.toml`.
 
 ## Что отдавать пользователю
 

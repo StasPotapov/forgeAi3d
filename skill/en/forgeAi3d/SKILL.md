@@ -3,8 +3,9 @@ name: forgeAi3d
 description: "Models parts for 3D printing: builds one from a description or edits a model that was sent in, hands back an STL with previews and a printability check, refines it after a test print."
 when_to_use: "\"make a stand/holder/lid\", \"I'd like to print one\", an STL/STEP sent in to be edited, a request to change a size or clearance, a test print result (\"the hole is too small\", \"it does not fit\")."
 argument-hint: <what to model, or a path to a model file>
-allowed-tools: Bash, Read, Write, Edit, WebSearch, WebFetch, AskUserQuestion, Skill
 ---
+
+Read `HOST.md` in this skill directory before running tools.
 
 # forgeAi3d — modelling for 3D printing
 
@@ -39,6 +40,9 @@ geometric 3MF go to its `extras/`; a configured root 3MF is not overwritten by C
 explicitly selects a model folder. Without either, the working directory is used;
 when it contains `model.py`, exports stay there. From a parent workspace they default
 to `models/<stem>/`. Runtime and virtual environment remain separate from personal data.
+Keep `FORGEAI3D_HOME` at the workspace that owns the shared printer profile; select
+the active bundle with `FORGEAI3D_MODEL_DIR` and `cd`. For a standalone bundle, both
+variables may name that bundle. `FORGEAI3D_PROFILE` explicitly selects a profile.
 Do not use runtime package directories as a workspace. Keep model-local hardware
 measurements in `extras/specs_cache.json`; copy required profiles into the folder.
 
@@ -61,11 +65,16 @@ Use `measure`, `preview` and `check` for geometry. Follow user-required code rev
 as well; review does not authorize committing a private model.
 
 ```bash
-cd "${FORGEAI3D_HOME:-$HOME/dev/forgeAi3d}"
-uv run python model.py                          # -> part.stl + extras/
-uv run tools/measure.py part.stl          # dimensions and holes as numbers
-uv run tools/preview.py part.stl          # -> extras/part.png
-uv run tools/check.py part.stl --material PETG   # exit 1 = do not print
+export FORGEAI3D_HOME="<absolute-model-workspace>"
+export FORGEAI3D_MODEL_DIR="<absolute-model-folder>"
+export FORGEAI3D_RUNTIME="<real-runtime-root>"
+export UV_PROJECT_ENVIRONMENT="${XDG_DATA_HOME:-$HOME/.local/share}/forgeAi3d/venv"
+export PYTHONDONTWRITEBYTECODE=1
+cd "$FORGEAI3D_MODEL_DIR"
+uv run --frozen --project "$FORGEAI3D_RUNTIME" python model.py                          # -> part.stl + extras/
+uv run --frozen --project "$FORGEAI3D_RUNTIME" python "$FORGEAI3D_RUNTIME/tools/measure.py" part.stl          # dimensions and holes as numbers
+uv run --frozen --project "$FORGEAI3D_RUNTIME" python "$FORGEAI3D_RUNTIME/tools/preview.py" part.stl          # -> extras/part.png
+uv run --frozen --project "$FORGEAI3D_RUNTIME" python "$FORGEAI3D_RUNTIME/tools/check.py" part.stl --material PETG   # exit 1 = do not print
 ```
 
 ## Rules that are not optional
@@ -178,18 +187,20 @@ to fill, do not decide it yourself. The list has hints — "open edges 0" means 
 void, and a size like 3.9×3.9×5.2 mm gives away a screw hole.
 
 ```bash
-uv run tools/solidify.py incoming.stl               # list the voids
-uv run tools/solidify.py incoming.stl --fill 1     # -> models/incoming_solid/
+uv run --frozen --project "$FORGEAI3D_RUNTIME" python "$FORGEAI3D_RUNTIME/tools/solidify.py" incoming.stl               # list the voids
+uv run --frozen --project "$FORGEAI3D_RUNTIME" python "$FORGEAI3D_RUNTIME/tools/solidify.py" incoming.stl --fill 1     # -> incoming_solid.stl in the opened model folder
 ```
 
-**Never overwrite the file that was sent in.** The result is a new file in `models/`.
+**Never overwrite the file that was sent in.** In an opened model folder, the result
+is a new `*_solid.stl` beside the source. From a workspace without a selected bundle,
+the default is `models/<stem>_solid/<stem>_solid.stl`. Use `--out` to select another path.
 
 **Checking against the original — `tools/compare.py`.** After remodelling someone else's
 STL, after `solidify.py`, and after an edit that was not supposed to touch the rest,
 compare the new against the old by numbers rather than by eye:
 
 ```bash
-uv run tools/compare.py incoming.stl part.stl --heatmap
+uv run --frozen --project "$FORGEAI3D_RUNTIME" python "$FORGEAI3D_RUNTIME/tools/compare.py" incoming.stl part.stl --heatmap
 ```
 
 Read both directions: `reference → candidate` is what got lost, `candidate → reference`
@@ -211,7 +222,7 @@ than from triangles. What it says and what to do about it:
 | lay it differently | the suggested rotation is augura's recommendation — decide it together with the user |
 | step thinner than a layer | a small feature will disappear: make it bigger or print with a thinner layer |
 
-To see **where** the overhangs are: `uv run tools/preview.py part.stl
+To see **where** the overhangs are: `uv run --frozen --project "$FORGEAI3D_RUNTIME" python "$FORGEAI3D_RUNTIME/tools/preview.py" part.stl
 --overhangs --material PETG` — they come out red. To see inside: `--section y` (cut
 through the middle, or `y:12.5`). The images land in `extras/` next to the part.
 
@@ -231,9 +242,15 @@ The user prints and says what is wrong. This is the most common work of all.
 | "the supports will not come off" | change the orientation or rework the overhang to 45° |
 
 Change **the constant**, rebuild, show the preview, and say exactly what changed. If the
-fix exposes a systematic error in the clearances, offer to calibrate: `uv run python models/fit_test_pla/model.py`, print the comb, and write the real numbers into `clearances` for that
-material in `forge/spec.py`. First copy `examples/fit_test.py` to that private `model.py` if it is absent;
-never overwrite an existing model or edit the public template.
+fix exposes a systematic clearance error, offer calibration. Choose a separate private
+calibration folder: `<workspace>/models/fit_test_pla` in a shared workspace, or a sibling
+of a standalone model folder. Never nest another model inside the active model.
+Copy runtime `examples/fit_test.py` there as `model.py` if absent; preserve existing files.
+Run `uv run --frozen --project "$FORGEAI3D_RUNTIME" python "<absolute-calibration-folder>/model.py"`.
+Keep the current `FORGEAI3D_HOME` and active profile selected for this run. If a profile
+file is in use, preserve its absolute path in `FORGEAI3D_PROFILE` before changing folders.
+Print the comb and write the measured values into the relevant material's `clearances`
+table in that same private `forge-profile.toml`.
 
 ## What to hand back to the user
 

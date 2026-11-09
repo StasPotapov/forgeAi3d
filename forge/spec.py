@@ -6,7 +6,11 @@ so before a part that matters they are worth calibrating with a test print
 (a set of holes in 0.05 mm steps is printed and the fit is picked off it).
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+import math
+import os
+from pathlib import Path
+import tomllib
 
 MM = float
 
@@ -138,6 +142,70 @@ MATERIALS: dict[str, Material] = {
 }
 
 AVAILABLE = ("PLA", "PETG")   # what is actually on the shelf
+
+
+
+def _overrides(current, changes):
+    """Validate TOML values against the existing typed profile; reject unknown fields."""
+    if not isinstance(changes, dict):
+        raise ValueError("profile section must be a table")
+    values = {}
+    for key, value in changes.items():
+        if not hasattr(current, key) or key not in current.__dataclass_fields__:
+            raise ValueError(f"unknown profile field: {key}")
+        old = getattr(current, key)
+        if isinstance(old, bool):
+            valid = isinstance(value, bool)
+        elif isinstance(old, float):
+            valid = type(value) in (int, float) and math.isfinite(value) and value >= 0
+            if key in {"nozzle", "extrusion_width", "layer_height", "max_bridge"}:
+                valid = valid and value > 0
+            if key == "shrink":
+                valid = valid and value < 1
+        elif isinstance(old, tuple):
+            valid = isinstance(value, list) and len(value) == 3 and all(
+                type(v) in (int, float) and math.isfinite(v) and v > 0 for v in value)
+            value = tuple(value) if valid else value
+        elif isinstance(old, dict):
+            valid = isinstance(value, dict) and not (value.keys() - old.keys()) and all(
+                type(v) in (int, float) and math.isfinite(v) and v >= 0 for v in value.values())
+            value = {**old, **value} if valid else value
+        else:
+            valid = isinstance(value, str) and bool(value.strip())
+        if not valid:
+            raise ValueError(f"invalid profile value: {key}")
+        values[key] = value
+    return replace(current, **values)
+
+
+def _load_profile():
+    # A workspace profile remains shared when MODEL_DIR selects an output bundle.
+    workspace = Path(os.environ.get("FORGEAI3D_HOME") or
+                     os.environ.get("FORGEAI3D_MODEL_DIR") or Path.cwd()).expanduser()
+    explicit = os.environ.get("FORGEAI3D_PROFILE")
+    path = Path(explicit).expanduser() if explicit else workspace / "forge-profile.toml"
+    if not path.exists() and not explicit:
+        return A1_MINI, MATERIALS, AVAILABLE
+    data = tomllib.loads(path.read_text())
+    if data.keys() - {"printer", "materials", "available"}:
+        raise ValueError("unknown forge profile section")
+    printer = _overrides(A1_MINI, data.get("printer", {}))
+    materials = dict(MATERIALS)
+    overrides = data.get("materials", {})
+    if not isinstance(overrides, dict) or overrides.keys() - materials.keys():
+        raise ValueError("material overrides must name a shipped material")
+    for name, changes in overrides.items():
+        material = _overrides(materials[name], changes)
+        if material.name != name:
+            raise ValueError("material name is a stable identifier and cannot be changed")
+        materials[name] = material
+    available = data.get("available", list(AVAILABLE))
+    if not isinstance(available, list) or not all(isinstance(v, str) and v in materials for v in available):
+        raise ValueError("available must list known materials")
+    return printer, materials, tuple(available)
+
+
+A1_MINI, MATERIALS, AVAILABLE = _load_profile()
 
 
 def in_stock(material: "str | Material") -> bool:

@@ -7,3 +7,4 @@ forge/specs_cache.json
 .idea/
 .ruff_cache/
 /models/
+forge-profile.toml
